@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Play, Plus, Star, Calendar, Clock, Tag, Users, Film, Globe, Zap, ThumbsUp, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import EpisodeSelector from "./episode-selector";
+import StreamPlayer, { type Episode } from "./stream-player";
 import { useContent } from "@/hooks/use-content";
 import type { Content } from "@shared/schema";
 
@@ -14,12 +15,35 @@ interface ContentModalProps {
 export default function ContentModal({ content, onClose }: ContentModalProps) {
   const { data: allContent = [] } = useContent();
   const [isTrailerPlaying, setIsTrailerPlaying] = useState(false);
+  const [currentEpisode, setCurrentEpisode] = useState(1);
+  const [currentSeason, setCurrentSeason] = useState(1);
   
-  // Extract YouTube video ID from various URL formats
-  const getYouTubeId = (url: string) => {
-    const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/;
-    const match = url.match(regex);
-    return match ? match[1] : null;
+  // Generate example episodes for series/anime
+  const generateEpisodes = (content: Content): Episode[] => {
+    if (content.type === 'movie') return [];
+    
+    const episodesPerSeason = content.type === 'anime' ? 12 : 8;
+    return Array.from({ length: episodesPerSeason }, (_, i) => ({
+      id: i + 1,
+      title: `Episódio ${i + 1}: ${content.type === 'anime' ? 'A Nova Batalha' : 'Revelações'}`,
+      duration: content.episodeDuration || "45min",
+      thumbnail: content.imageUrl,
+      description: `Uma emocionante continuação da história de ${content.title}.`
+    }));
+  };
+  
+  const episodes = content ? generateEpisodes(content) : [];
+  const seasons = content?.totalSeasons ? Array.from({ length: content.totalSeasons }, (_, i) => i + 1) : [1];
+  
+  const handleEpisodeChange = (episode: number) => {
+    setCurrentEpisode(episode);
+    // Aqui você poderia carregar um vídeo diferente baseado no episódio
+  };
+  
+  const handleSeasonChange = (season: number) => {
+    setCurrentSeason(season);
+    setCurrentEpisode(1); // Reset to first episode of new season
+    // Aqui você poderia carregar episódios da nova temporada
   };
   
   if (!content) return null;
@@ -100,25 +124,23 @@ export default function ContentModal({ content, onClose }: ContentModalProps) {
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.5 }}
                   >
-                    {(() => {
-                      const videoId = getYouTubeId(content.trailerUrl);
-                      if (!videoId) {
-                        return (
-                          <div className="w-full h-full flex items-center justify-center bg-black text-white">
-                            <p>Trailer não disponível</p>
-                          </div>
-                        );
-                      }
-                      return (
-                        <iframe
-                          src={`https://www.youtube.com/embed/${videoId}?autoplay=1&controls=1`}
-                          className="w-full h-full"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          data-testid="trailer-video"
-                        />
-                      );
-                    })()}
+                    {content.trailerUrl ? (
+                      <StreamPlayer
+                        content={content}
+                        videoUrl={content.trailerUrl}
+                        onClose={() => setIsTrailerPlaying(false)}
+                        episodes={episodes}
+                        currentEpisode={currentEpisode}
+                        onEpisodeChange={handleEpisodeChange}
+                        seasons={seasons}
+                        currentSeason={currentSeason}
+                        onSeasonChange={handleSeasonChange}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-black text-white">
+                        <p>Vídeo não disponível</p>
+                      </div>
+                    )}
                     <button
                       className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors z-10"
                       onClick={() => setIsTrailerPlaying(false)}
