@@ -4,11 +4,14 @@ import HeroCarousel from "@/components/hero-carousel";
 import CategoryTabs from "@/components/category-tabs";
 import ContentCarousel from "@/components/content-carousel";
 import ContentGrid from "@/components/content-grid";
+import ContentModal from "@/components/content-modal";
 import Footer from "@/components/footer";
 import { useState } from "react";
+import type { Content } from "@shared/schema";
 
 export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedContent, setSelectedContent] = useState<Content | null>(null);
 
   return (
     <div className="min-h-screen overflow-x-hidden">
@@ -33,7 +36,7 @@ export default function Home() {
               Ver Todos <i className="fas fa-arrow-right ml-2"></i>
             </button>
           </div>
-          <ContentCarousel type="trending" />
+          <ContentCarousel type="trending" onContentClick={setSelectedContent} />
         </div>
       </motion.section>
 
@@ -75,9 +78,14 @@ export default function Home() {
               Ver Todos <i className="fas fa-arrow-right ml-2"></i>
             </button>
           </div>
-          <ContentCarousel type="popular" />
+          <ContentCarousel type="popular" onContentClick={setSelectedContent} />
         </div>
       </motion.section>
+
+      <ContentModal 
+        content={selectedContent} 
+        onClose={() => setSelectedContent(null)} 
+      />
 
       <Footer />
     </div>

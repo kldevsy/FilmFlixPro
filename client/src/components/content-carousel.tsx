@@ -1,30 +1,73 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, useRef, useEffect } from "react";
+import { motion, useMotionValue, PanInfo } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ContentCard from "./content-card";
 import { useTrendingContent, usePopularContent } from "@/hooks/use-content";
+import type { Content } from "@shared/schema";
 
 interface ContentCarouselProps {
   type: "trending" | "popular";
+  onContentClick?: (content: Content) => void;
 }
 
-export default function ContentCarousel({ type }: ContentCarouselProps) {
+export default function ContentCarousel({ type, onContentClick }: ContentCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [itemsPerView, setItemsPerView] = useState(3);
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const x = useMotionValue(0);
   
   const { data: trendingContent = [] } = useTrendingContent();
   const { data: popularContent = [] } = usePopularContent();
   
   const content = type === "trending" ? trendingContent : popularContent;
-  const itemsPerView = 3;
+  const cardWidth = 320;
+  const gap = 24;
+  const totalWidth = content.length * (cardWidth + gap) - gap;
+  const containerWidth = itemsPerView * (cardWidth + gap) - gap;
+  
   const maxIndex = Math.max(0, content.length - itemsPerView);
+  const maxDrag = Math.max(0, totalWidth - containerWidth);
+
+  useEffect(() => {
+    const updateItemsPerView = () => {
+      if (typeof window !== 'undefined') {
+        setItemsPerView(window.innerWidth < 768 ? 1 : window.innerWidth < 1024 ? 2 : 3);
+      }
+    };
+    
+    updateItemsPerView();
+    window.addEventListener('resize', updateItemsPerView);
+    return () => window.removeEventListener('resize', updateItemsPerView);
+  }, []);
 
   const nextSlide = () => {
-    setCurrentIndex((prev) => Math.min(prev + 1, maxIndex));
+    const newIndex = Math.min(currentIndex + 1, maxIndex);
+    setCurrentIndex(newIndex);
+    x.set(-newIndex * (cardWidth + gap));
   };
 
   const prevSlide = () => {
-    setCurrentIndex((prev) => Math.max(prev - 1, 0));
+    const newIndex = Math.max(currentIndex - 1, 0);
+    setCurrentIndex(newIndex);
+    x.set(-newIndex * (cardWidth + gap));
+  };
+
+  const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    const offset = info.offset.x;
+    const velocity = info.velocity.x;
+    
+    if (Math.abs(offset) > 50 || Math.abs(velocity) > 500) {
+      if (offset > 0 && currentIndex > 0) {
+        prevSlide();
+      } else if (offset < 0 && currentIndex < maxIndex) {
+        nextSlide();
+      } else {
+        x.set(-currentIndex * (cardWidth + gap));
+      }
+    } else {
+      x.set(-currentIndex * (cardWidth + gap));
+    }
   };
 
   if (content.length === 0) {
@@ -40,24 +83,35 @@ export default function ContentCarousel({ type }: ContentCarouselProps) {
   }
 
   return (
-    <div className="relative overflow-hidden" data-testid={`${type}-carousel`}>
+    <div className="relative overflow-hidden select-none" data-testid={`${type}-carousel`}>
       <motion.div 
-        className="flex space-x-6 transition-transform duration-500"
-        animate={{ x: -currentIndex * (320 + 24) }} // 320px width + 24px gap
+        ref={carouselRef}
+        className="flex space-x-6 cursor-grab active:cursor-grabbing"
+        style={{ x }}
+        drag="x"
+        dragConstraints={{ left: -maxDrag, right: 0 }}
+        dragElastic={0.2}
+        onDragEnd={handleDragEnd}
+        whileTap={{ cursor: "grabbing" }}
       >
         {content.map((item, index) => (
           <motion.div
             key={item.id}
-            className="flex-shrink-0 w-80"
+            className="flex-shrink-0 w-80 pointer-events-none"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: index * 0.1 }}
           >
-            <ContentCard 
-              content={item} 
-              variant="carousel" 
-              ranking={type === "trending" ? index + 1 : undefined}
-            />
+            <div 
+              className="pointer-events-auto"
+              onClick={() => onContentClick?.(item)}
+            >
+              <ContentCard 
+                content={item} 
+                variant="carousel" 
+                ranking={type === "trending" ? index + 1 : undefined}
+              />
+            </div>
           </motion.div>
         ))}
       </motion.div>

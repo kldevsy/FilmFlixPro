@@ -69,9 +69,9 @@ export default function HeroCarousel() {
         />
       </AnimatePresence>
       
-      <div className="relative container mx-auto px-6 h-full flex items-center">
+      <div className="relative container mx-auto px-4 sm:px-6 h-full flex items-center overflow-hidden">
         <motion.div 
-          className="max-w-2xl"
+          className="max-w-4xl w-full overflow-hidden"
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
@@ -88,7 +88,7 @@ export default function HeroCarousel() {
           </motion.div>
           
           <motion.h1 
-            className="text-6xl md:text-7xl font-bold mb-6 leading-tight"
+            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight break-words"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.6 }}
@@ -106,7 +106,7 @@ export default function HeroCarousel() {
           </motion.h1>
           
           <motion.p 
-            className="text-xl text-muted-foreground mb-8 leading-relaxed max-w-xl"
+            className="text-lg sm:text-xl text-muted-foreground mb-8 leading-relaxed max-w-2xl break-words"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.8 }}
@@ -141,14 +141,14 @@ export default function HeroCarousel() {
           </motion.div>
           
           <motion.div 
-            className="flex space-x-4"
+            className="flex flex-col sm:flex-row gap-4"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 1.2 }}
           >
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button 
-                className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-300 animate-glow"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 animate-glow w-full sm:w-auto"
                 data-testid="play-button"
               >
                 <Play className="w-5 h-5 mr-2" />
@@ -158,7 +158,7 @@ export default function HeroCarousel() {
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button 
                 variant="outline"
-                className="bg-card/80 hover:bg-card text-card-foreground px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-300 border border-border"
+                className="bg-card/80 hover:bg-card text-card-foreground px-8 py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 border border-border w-full sm:w-auto"
                 data-testid="add-to-list-button"
               >
                 <Plus className="w-5 h-5 mr-2" />
