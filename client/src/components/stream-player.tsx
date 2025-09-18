@@ -56,16 +56,36 @@ export default function StreamPlayer({
   const [introEnd, setIntroEnd] = useState(90); // 90 segundos de abertura
   const [isBuffering, setIsBuffering] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [isMobile, setIsMobile] = useState(false);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
   let controlsTimeout: NodeJS.Timeout;
+
+  // Detecção de mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        ('ontouchstart' in window) ||
+        (navigator.maxTouchPoints > 0)
+      );
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Controle de visibilidade dos controles
   const resetControlsTimeout = () => {
     clearTimeout(controlsTimeout);
     setShowControls(true);
+    // No mobile, deixar controles visíveis por mais tempo
+    const timeout = isMobile ? 5000 : 3000;
     controlsTimeout = setTimeout(() => {
-      if (isPlaying) setShowControls(false);
-    }, 3000);
+      if (isPlaying && !isMobile) setShowControls(false);
+    }, timeout);
   };
 
   // Event listeners para o vídeo
@@ -115,19 +135,33 @@ export default function StreamPlayer({
     };
   }, []);
 
-  // Mouse movement handler
+  // Mouse movement e touch handler
   useEffect(() => {
     const handleMouseMove = () => resetControlsTimeout();
+    const handleTouch = () => {
+      setHasUserInteracted(true);
+      setShowControls(!showControls);
+    };
     
     if (playerRef.current) {
+      // Eventos de mouse para desktop
       playerRef.current.addEventListener('mousemove', handleMouseMove);
+      
+      // Eventos de touch para mobile
+      if (isMobile) {
+        playerRef.current.addEventListener('touchstart', handleTouch, { passive: true });
+        playerRef.current.addEventListener('touchend', handleTouch, { passive: true });
+      }
+      
       return () => {
         if (playerRef.current) {
           playerRef.current.removeEventListener('mousemove', handleMouseMove);
+          playerRef.current.removeEventListener('touchstart', handleTouch);
+          playerRef.current.removeEventListener('touchend', handleTouch);
         }
       };
     }
-  }, [isPlaying]);
+  }, [isPlaying, isMobile, showControls]);
 
   // Keyboard controls
   useEffect(() => {
@@ -170,13 +204,22 @@ export default function StreamPlayer({
     return () => document.removeEventListener('keydown', handleKeyPress);
   }, []);
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (!videoRef.current) return;
     
-    if (isPlaying) {
-      videoRef.current.pause();
-    } else {
-      videoRef.current.play();
+    setHasUserInteracted(true);
+    
+    try {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        // No mobile, pode ser necessário uma interação do usuário primeiro
+        await videoRef.current.play();
+      }
+    } catch (error) {
+      console.warn('Erro ao reproduzir vídeo:', error);
+      // Fallback: mostrar controles para tentar novamente
+      setShowControls(true);
     }
   };
 
@@ -234,14 +277,43 @@ export default function StreamPlayer({
     
     try {
       if (!isFullscreen) {
-        await playerRef.current.requestFullscreen();
+        // Diferentes métodos de fullscreen para compatibilidade
+        const element = playerRef.current;
+        
+        if (element.requestFullscreen) {
+          await element.requestFullscreen();
+        } else if ((element as any).webkitRequestFullscreen) {
+          // Safari/iOS
+          await (element as any).webkitRequestFullscreen();
+        } else if ((element as any).mozRequestFullScreen) {
+          // Firefox
+          await (element as any).mozRequestFullScreen();
+        } else if ((element as any).msRequestFullscreen) {
+          // IE/Edge
+          await (element as any).msRequestFullscreen();
+        } else if (isMobile && videoRef.current) {
+          // Fallback para mobile: fullscreen no vídeo
+          if ((videoRef.current as any).webkitEnterFullscreen) {
+            (videoRef.current as any).webkitEnterFullscreen();
+          }
+        }
         setIsFullscreen(true);
       } else {
-        await document.exitFullscreen();
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        } else if ((document as any).mozCancelFullScreen) {
+          await (document as any).mozCancelFullScreen();
+        } else if ((document as any).msExitFullscreen) {
+          await (document as any).msExitFullscreen();
+        }
         setIsFullscreen(false);
       }
     } catch (error) {
-      console.error('Fullscreen error:', error);
+      console.warn('Erro ao alternar fullscreen:', error);
+      // Em dispositivos móveis, às vezes o fullscreen falha silenciosamente
+      setIsFullscreen(!isFullscreen);
     }
   };
 
@@ -280,7 +352,16 @@ export default function StreamPlayer({
         src={videoUrl}
         className="w-full h-full object-contain"
         onLoadStart={() => setIsBuffering(true)}
+        onClick={isMobile ? togglePlay : undefined}
+        onTouchStart={isMobile ? () => setHasUserInteracted(true) : undefined}
+        playsInline={true}
+        preload="metadata"
+        crossOrigin="anonymous"
         data-testid="stream-video"
+        style={{
+          // Garantir que o vídeo seja clicável no mobile
+          pointerEvents: isMobile ? 'auto' : 'none'
+        }}
       />
 
       {/* Buffering Spinner */}
