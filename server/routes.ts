@@ -48,7 +48,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/profiles/:id', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
+      const userId = req.user.claims.sub;
       const updates = req.body;
+      
+      // Check if profile belongs to the user
+      const existingProfile = await storage.getProfile(id);
+      if (!existingProfile || existingProfile.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const profile = await storage.updateProfile(id, updates);
       res.json(profile);
     } catch (error) {
@@ -60,6 +68,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/profiles/:id', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
+      const userId = req.user.claims.sub;
+      
+      // Check if profile belongs to the user
+      const existingProfile = await storage.getProfile(id);
+      if (!existingProfile || existingProfile.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       await storage.deleteProfile(id);
       res.json({ message: "Profile deleted successfully" });
     } catch (error) {
@@ -69,9 +85,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Watch history routes
-  app.get('/api/profiles/:profileId/watch-history', isAuthenticated, async (req, res) => {
+  app.get('/api/profiles/:profileId/watch-history', isAuthenticated, async (req: any, res) => {
     try {
       const { profileId } = req.params;
+      const userId = req.user.claims.sub;
+      
+      // Check if profile belongs to the user
+      const profile = await storage.getProfile(profileId);
+      if (!profile || profile.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const history = await storage.getWatchHistory(profileId);
       res.json(history);
     } catch (error) {
@@ -80,9 +104,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/profiles/:profileId/watch-progress', isAuthenticated, async (req, res) => {
+  app.post('/api/profiles/:profileId/watch-progress', isAuthenticated, async (req: any, res) => {
     try {
       const { profileId } = req.params;
+      const userId = req.user.claims.sub;
+      
+      // Check if profile belongs to the user
+      const profile = await storage.getProfile(profileId);
+      if (!profile || profile.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const watchData = insertWatchHistorySchema.parse({ ...req.body, profileId });
       const watchHistory = await storage.updateWatchProgress(watchData);
       res.json(watchHistory);
@@ -92,9 +124,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Content routes (public access for now)
+  // Content routes - protected with authentication
   // Get all content
-  app.get("/api/content", async (req, res) => {
+  app.get("/api/content", isAuthenticated, async (req, res) => {
     try {
       const content = await storage.getContent();
       res.json(content);
@@ -104,7 +136,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get content by type
-  app.get("/api/content/type/:type", async (req, res) => {
+  app.get("/api/content/type/:type", isAuthenticated, async (req, res) => {
     try {
       const { type } = req.params;
       const content = await storage.getContentByType(type);
@@ -115,7 +147,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get trending content
-  app.get("/api/content/trending", async (req, res) => {
+  app.get("/api/content/trending", isAuthenticated, async (req, res) => {
     try {
       const content = await storage.getTrendingContent();
       res.json(content);
@@ -125,7 +157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get new releases
-  app.get("/api/content/new-releases", async (req, res) => {
+  app.get("/api/content/new-releases", isAuthenticated, async (req, res) => {
     try {
       const content = await storage.getNewReleases();
       res.json(content);
@@ -135,7 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get popular content
-  app.get("/api/content/popular", async (req, res) => {
+  app.get("/api/content/popular", isAuthenticated, async (req, res) => {
     try {
       const content = await storage.getPopularContent();
       res.json(content);
@@ -145,7 +177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Search content
-  app.get("/api/content/search", async (req, res) => {
+  app.get("/api/content/search", isAuthenticated, async (req, res) => {
     try {
       const { q } = req.query;
       if (!q || typeof q !== "string") {
@@ -159,7 +191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get content by ID
-  app.get("/api/content/:id", async (req, res) => {
+  app.get("/api/content/:id", isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
       const content = await storage.getContentById(id);
