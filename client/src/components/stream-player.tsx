@@ -530,7 +530,7 @@ export default function StreamPlayer({
             </div>
 
             {/* Center Play Button (when paused) */}
-            {!isPlaying && !isBuffering && (
+            {(!isPlaying && !isBuffering) || (isMobile && !hasUserInteracted) && (
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -538,10 +538,16 @@ export default function StreamPlayer({
               >
                 <Button
                   onClick={togglePlay}
-                  className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full p-6"
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    setHasUserInteracted(true);
+                  }}
+                  className={`bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full transition-all ${
+                    isMobile ? 'p-8 scale-110' : 'p-6'
+                  }`}
                   data-testid="center-play-button"
                 >
-                  <Play className="w-12 h-12 text-white" fill="white" />
+                  <Play className={`text-white ${isMobile ? 'w-16 h-16' : 'w-12 h-12'}`} fill="white" />
                 </Button>
               </motion.div>
             )}
@@ -551,92 +557,141 @@ export default function StreamPlayer({
               {/* Progress Bar */}
               <div 
                 ref={progressRef}
-                className="relative w-full h-2 bg-white/20 rounded-full mb-4 cursor-pointer group"
+                className={`relative w-full bg-white/20 rounded-full mb-4 cursor-pointer group ${
+                  isMobile ? 'h-4 py-2 -my-2' : 'h-2'
+                }`}
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   const percentage = ((e.clientX - rect.left) / rect.width) * 100;
                   seekTo(percentage);
                 }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const touch = e.changedTouches[0];
+                  const percentage = ((touch.clientX - rect.left) / rect.width) * 100;
+                  seekTo(percentage);
+                }}
                 data-testid="progress-bar"
               >
                 <div
-                  className="absolute left-0 top-0 h-full bg-primary rounded-full transition-all"
+                  className={`absolute left-0 top-1/2 -translate-y-1/2 bg-primary rounded-full transition-all ${
+                    isMobile ? 'h-2' : 'h-full'
+                  }`}
                   style={{ width: `${progressPercentage}%` }}
                 />
                 <div
-                  className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ left: `calc(${progressPercentage}% - 8px)` }}
+                  className={`absolute top-1/2 -translate-y-1/2 bg-primary rounded-full transition-opacity ${
+                    isMobile ? 'w-6 h-6 opacity-100' : 'w-4 h-4 opacity-0 group-hover:opacity-100'
+                  }`}
+                  style={{ left: `calc(${progressPercentage}% - ${isMobile ? '12px' : '8px'})` }}
                 />
               </div>
 
               {/* Control Buttons */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+              <div className={`flex items-center justify-between ${isMobile ? 'gap-2' : ''}`}>
+                <div className={`flex items-center ${isMobile ? 'gap-2' : 'gap-4'}`}>
                   <Button
                     onClick={togglePlay}
+                    onTouchStart={(e) => e.stopPropagation()}
                     variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-white/20"
+                    size={isMobile ? "default" : "sm"}
+                    className={`text-white hover:bg-white/20 ${
+                      isMobile ? 'min-h-[44px] min-w-[44px] p-3' : ''
+                    }`}
                     data-testid="play-pause-button"
                   >
-                    {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                    {isPlaying ? 
+                      <Pause className={isMobile ? "w-6 h-6" : "w-5 h-5"} /> : 
+                      <Play className={isMobile ? "w-6 h-6" : "w-5 h-5"} />
+                    }
                   </Button>
 
                   <Button
                     onClick={skipBackward}
+                    onTouchStart={(e) => e.stopPropagation()}
                     variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-white/20"
+                    size={isMobile ? "default" : "sm"}
+                    className={`text-white hover:bg-white/20 ${
+                      isMobile ? 'min-h-[44px] min-w-[44px] p-3' : ''
+                    }`}
                     data-testid="skip-backward-button"
                   >
-                    <RotateCcw className="w-4 h-4" />
-                    <span className="ml-1 text-xs">10s</span>
+                    <RotateCcw className={isMobile ? "w-5 h-5" : "w-4 h-4"} />
+                    {!isMobile && <span className="ml-1 text-xs">10s</span>}
                   </Button>
 
                   <Button
                     onClick={skipForward}
+                    onTouchStart={(e) => e.stopPropagation()}
                     variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-white/20"
+                    size={isMobile ? "default" : "sm"}
+                    className={`text-white hover:bg-white/20 ${
+                      isMobile ? 'min-h-[44px] min-w-[44px] p-3' : ''
+                    }`}
                     data-testid="skip-forward-button"
                   >
-                    <RotateCw className="w-4 h-4" />
-                    <span className="ml-1 text-xs">10s</span>
+                    <RotateCw className={isMobile ? "w-5 h-5" : "w-4 h-4"} />
+                    {!isMobile && <span className="ml-1 text-xs">10s</span>}
                   </Button>
 
-                  <div className="flex items-center gap-2 group">
-                    <Button
-                      onClick={toggleMute}
-                      variant="ghost"
-                      size="sm"
-                      className="text-white hover:bg-white/20"
-                      data-testid="mute-button"
-                    >
-                      <VolumeIcon className="w-4 h-4" />
-                    </Button>
-                    
-                    <div className="w-20 h-1 bg-white/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div
-                        className="h-full bg-white rounded-full transition-all"
-                        style={{ width: `${volume * 100}%` }}
-                      />
+                  {/* Volume Control - Ocultar no mobile para economizar espaço */}
+                  {!isMobile && (
+                    <div className="flex items-center gap-2 group">
+                      <Button
+                        onClick={toggleMute}
+                        variant="ghost"
+                        size="sm"
+                        className="text-white hover:bg-white/20"
+                        data-testid="mute-button"
+                      >
+                        <VolumeIcon className="w-4 h-4" />
+                      </Button>
+                      
+                      <div className="w-20 h-1 bg-white/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div
+                          className="h-full bg-white rounded-full transition-all"
+                          style={{ width: `${volume * 100}%` }}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <span className="text-white/80 text-sm">
+                  <span className={`text-white/80 ${isMobile ? 'text-xs' : 'text-sm'}`}>
                     {formatTime(currentTime)} / {formatTime(duration)}
                   </span>
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Volume button for mobile */}
+                  {isMobile && (
+                    <Button
+                      onClick={toggleMute}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      variant="ghost"
+                      size="default"
+                      className="text-white hover:bg-white/20 min-h-[44px] min-w-[44px] p-3"
+                      data-testid="mute-button-mobile"
+                    >
+                      <VolumeIcon className="w-5 h-5" />
+                    </Button>
+                  )}
+                  
                   <Button
                     onClick={toggleFullscreen}
+                    onTouchStart={(e) => e.stopPropagation()}
                     variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-white/20"
+                    size={isMobile ? "default" : "sm"}
+                    className={`text-white hover:bg-white/20 ${
+                      isMobile ? 'min-h-[44px] min-w-[44px] p-3' : ''
+                    }`}
                     data-testid="fullscreen-button"
                   >
-                    {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+                    {isFullscreen ? 
+                      <Minimize className={isMobile ? "w-5 h-5" : "w-4 h-4"} /> : 
+                      <Maximize className={isMobile ? "w-5 h-5" : "w-4 h-4"} />
+                    }
                   </Button>
                 </div>
               </div>
