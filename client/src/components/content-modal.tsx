@@ -4,6 +4,7 @@ import { X, Play, Plus, Star, Calendar, Clock, Tag, Users, Film, Globe, Zap, Thu
 import { Button } from "@/components/ui/button";
 import EpisodeSelector from "./episode-selector";
 import StreamPlayer, { type Episode } from "./stream-player";
+import TrailerPlayer from "./trailer-player";
 import { useContent } from "@/hooks/use-content";
 import type { Content } from "@shared/schema";
 
@@ -125,29 +126,16 @@ export default function ContentModal({ content, onClose }: ContentModalProps) {
                     transition={{ duration: 0.5 }}
                   >
                     {content.trailerUrl ? (
-                      <StreamPlayer
-                        content={content}
+                      <TrailerPlayer
                         videoUrl={content.trailerUrl}
+                        title={content.title}
                         onClose={() => setIsTrailerPlaying(false)}
-                        episodes={episodes}
-                        currentEpisode={currentEpisode}
-                        onEpisodeChange={handleEpisodeChange}
-                        seasons={seasons}
-                        currentSeason={currentSeason}
-                        onSeasonChange={handleSeasonChange}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-black text-white">
                         <p>Vídeo não disponível</p>
                       </div>
                     )}
-                    <button
-                      className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors z-10"
-                      onClick={() => setIsTrailerPlaying(false)}
-                      data-testid="trailer-close-button"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
                   </motion.div>
                 )}
               </motion.div>
