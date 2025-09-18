@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, Pause, Volume2, VolumeOff, X, RotateCcw, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
   const [isMobile, setIsMobile] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
 
-  let controlsTimeout: NodeJS.Timeout;
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Detecção de mobile
   useEffect(() => {
@@ -38,15 +38,17 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
   }, []);
 
   // Auto-hide controls
-  const resetControlsTimeout = () => {
-    clearTimeout(controlsTimeout);
+  const resetControlsTimeout = useCallback(() => {
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
     setShowControls(true);
-    controlsTimeout = setTimeout(() => {
+    controlsTimeoutRef.current = setTimeout(() => {
       if (isPlaying && hasStarted) {
         setShowControls(false);
       }
     }, isMobile ? 4000 : 3000);
-  };
+  }, [isPlaying, hasStarted, isMobile]);
 
   // Video event listeners
   useEffect(() => {
@@ -59,6 +61,7 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
       setIsPlaying(true);
       setIsBuffering(false);
       setHasStarted(true);
+      resetControlsTimeout();
     };
     const handlePause = () => setIsPlaying(false);
     const handleWaiting = () => setIsBuffering(true);
@@ -79,37 +82,48 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
       video.removeEventListener('waiting', handleWaiting);
       video.removeEventListener('canplay', handleCanPlay);
     };
+  }, [resetControlsTimeout]);
+
+  // Touch and mouse events  
+  const handleInteraction = useCallback(() => {
+    resetControlsTimeout();
+  }, [resetControlsTimeout]);
+
+  const handleTouchToggle = useCallback((e: TouchEvent) => {
+    e.preventDefault();
+    setShowControls(!showControls);
+    resetControlsTimeout();
+  }, [showControls, resetControlsTimeout]);
+
+  useEffect(() => {
+    const element = playerRef.current;
+    if (!element) return;
+
+    if (isMobile) {
+      element.addEventListener('touchstart', handleTouchToggle, { passive: false });
+    } else {
+      element.addEventListener('mousemove', handleInteraction);
+    }
+    
+    return () => {
+      if (isMobile) {
+        element.removeEventListener('touchstart', handleTouchToggle);
+      } else {
+        element.removeEventListener('mousemove', handleInteraction);
+      }
+    };
+  }, [isMobile, handleTouchToggle, handleInteraction]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
   }, []);
 
-  // Touch and mouse events
-  useEffect(() => {
-    const handleInteraction = () => {
-      resetControlsTimeout();
-    };
-
-    const handleTouchToggle = (e: TouchEvent) => {
-      e.preventDefault();
-      setShowControls(!showControls);
-      resetControlsTimeout();
-    };
-
-    if (playerRef.current) {
-      if (isMobile) {
-        playerRef.current.addEventListener('touchstart', handleTouchToggle, { passive: false });
-      } else {
-        playerRef.current.addEventListener('mousemove', handleInteraction);
-      }
-      
-      return () => {
-        if (playerRef.current) {
-          playerRef.current.removeEventListener('touchstart', handleTouchToggle);
-          playerRef.current.removeEventListener('mousemove', handleInteraction);
-        }
-      };
-    }
-  }, [isMobile, showControls]);
-
-  const togglePlay = async () => {
+  const togglePlay = useCallback(async () => {
     if (!videoRef.current) return;
     
     try {
@@ -118,11 +132,12 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
       } else {
         await videoRef.current.play();
         setHasStarted(true);
+        resetControlsTimeout();
       }
     } catch (error) {
       console.warn('Erro ao reproduzir trailer:', error);
     }
-  };
+  }, [isPlaying, resetControlsTimeout]);
 
   const toggleMute = () => {
     if (!videoRef.current) return;
