@@ -103,7 +103,7 @@ export default function ContentModal({ content, onClose }: ContentModalProps) {
             {/* Trailer Play Button/Video */}
             {content.trailerUrl && (
               <motion.div 
-                className="absolute inset-0 flex items-center justify-center"
+                className="absolute inset-0 flex items-center justify-center z-20"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.3 }}
@@ -141,8 +141,9 @@ export default function ContentModal({ content, onClose }: ContentModalProps) {
               </motion.div>
             )}
             
-            {/* Content Info Overlay */}
-            <div className="absolute bottom-6 left-6 right-6">
+            {/* Content Info Overlay - Hide quando trailer está tocando */}
+            {!isTrailerPlaying && (
+              <div className="absolute bottom-6 left-6 right-6 z-10">
               <motion.div
                 className="flex items-center gap-2 mb-3"
                 initial={{ opacity: 0, x: -20 }}
@@ -211,6 +212,7 @@ export default function ContentModal({ content, onClose }: ContentModalProps) {
                 )}
               </motion.div>
             </div>
+            )}
           </div>
 
           {/* Content Section */}
