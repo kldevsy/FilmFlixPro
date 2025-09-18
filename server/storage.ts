@@ -1,7 +1,23 @@
-import { type Content, type InsertContent } from "@shared/schema";
+import {
+  content,
+  users,
+  profiles,
+  watchHistory,
+  type Content,
+  type InsertContent,
+  type User,
+  type UpsertUser,
+  type Profile,
+  type InsertProfile,
+  type WatchHistory,
+  type InsertWatchHistory
+} from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
+  // Content operations
   getContent(): Promise<Content[]>;
   getContentByType(type: string): Promise<Content[]>;
   getTrendingContent(): Promise<Content[]>;
@@ -10,13 +26,29 @@ export interface IStorage {
   getContentById(id: string): Promise<Content | undefined>;
   createContent(content: InsertContent): Promise<Content>;
   searchContent(query: string): Promise<Content[]>;
+  
+  // User operations - required for Replit Auth
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  
+  // Profile operations
+  getProfilesByUser(userId: string): Promise<Profile[]>;
+  createProfile(profile: InsertProfile): Promise<Profile>;
+  getProfile(id: string): Promise<Profile | undefined>;
+  updateProfile(id: string, updates: Partial<InsertProfile>): Promise<Profile>;
+  deleteProfile(id: string): Promise<void>;
+  
+  // Watch history operations
+  getWatchHistory(profileId: string): Promise<WatchHistory[]>;
+  updateWatchProgress(data: InsertWatchHistory): Promise<WatchHistory>;
+  markAsWatched(profileId: string, contentId: string): Promise<void>;
 }
 
-export class MemStorage implements IStorage {
-  private content: Map<string, Content>;
+export class DatabaseStorage implements IStorage {
+  private memoryContent: Map<string, Content>;
 
   constructor() {
-    this.content = new Map();
+    this.memoryContent = new Map();
     this.seedData();
   }
 
@@ -291,45 +323,46 @@ export class MemStorage implements IStorage {
         id,
         createdAt: new Date()
       };
-      this.content.set(id, content);
+      this.memoryContent.set(id, content);
     });
   }
 
+  // Content operations - using memory storage for now
   async getContent(): Promise<Content[]> {
-    return Array.from(this.content.values());
+    return Array.from(this.memoryContent.values());
   }
 
   async getContentByType(type: string): Promise<Content[]> {
-    return Array.from(this.content.values()).filter(
+    return Array.from(this.memoryContent.values()).filter(
       (content) => content.type === type
     );
   }
 
   async getTrendingContent(): Promise<Content[]> {
-    return Array.from(this.content.values()).filter(
+    return Array.from(this.memoryContent.values()).filter(
       (content) => content.isTrending
     );
   }
 
   async getNewReleases(): Promise<Content[]> {
-    return Array.from(this.content.values()).filter(
+    return Array.from(this.memoryContent.values()).filter(
       (content) => content.isNewRelease
     );
   }
 
   async getPopularContent(): Promise<Content[]> {
-    return Array.from(this.content.values()).filter(
+    return Array.from(this.memoryContent.values()).filter(
       (content) => content.isPopular
     );
   }
 
   async getContentById(id: string): Promise<Content | undefined> {
-    return this.content.get(id);
+    return this.memoryContent.get(id);
   }
 
   async createContent(insertContent: InsertContent): Promise<Content> {
     const id = randomUUID();
-    const content: Content = {
+    const contentData: Content = {
       ...insertContent,
       id,
       duration: insertContent.duration ?? null,
@@ -351,19 +384,111 @@ export class MemStorage implements IStorage {
       isPopular: insertContent.isPopular ?? null,
       createdAt: new Date()
     };
-    this.content.set(id, content);
-    return content;
+    this.memoryContent.set(id, contentData);
+    return contentData;
   }
 
   async searchContent(query: string): Promise<Content[]> {
     const lowerQuery = query.toLowerCase();
-    return Array.from(this.content.values()).filter(
+    return Array.from(this.memoryContent.values()).filter(
       (content) =>
         content.title.toLowerCase().includes(lowerQuery) ||
         content.description.toLowerCase().includes(lowerQuery) ||
         content.genre.toLowerCase().includes(lowerQuery)
     );
   }
+
+  // User operations - required for Replit Auth
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
+  // Profile operations
+  async getProfilesByUser(userId: string): Promise<Profile[]> {
+    return await db.select().from(profiles).where(eq(profiles.userId, userId));
+  }
+
+  async createProfile(profile: InsertProfile): Promise<Profile> {
+    const [newProfile] = await db.insert(profiles).values(profile).returning();
+    return newProfile;
+  }
+
+  async getProfile(id: string): Promise<Profile | undefined> {
+    const [profile] = await db.select().from(profiles).where(eq(profiles.id, id));
+    return profile;
+  }
+
+  async updateProfile(id: string, updates: Partial<InsertProfile>): Promise<Profile> {
+    const [updatedProfile] = await db
+      .update(profiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(profiles.id, id))
+      .returning();
+    return updatedProfile;
+  }
+
+  async deleteProfile(id: string): Promise<void> {
+    await db.delete(profiles).where(eq(profiles.id, id));
+  }
+
+  // Watch history operations
+  async getWatchHistory(profileId: string): Promise<WatchHistory[]> {
+    return await db
+      .select()
+      .from(watchHistory)
+      .where(eq(watchHistory.profileId, profileId))
+      .orderBy(desc(watchHistory.watchedAt));
+  }
+
+  async updateWatchProgress(data: InsertWatchHistory): Promise<WatchHistory> {
+    const [existing] = await db
+      .select()
+      .from(watchHistory)
+      .where(
+        and(
+          eq(watchHistory.profileId, data.profileId),
+          eq(watchHistory.contentId, data.contentId),
+          data.episodeNumber ? eq(watchHistory.episodeNumber, data.episodeNumber) : undefined
+        )
+      );
+
+    if (existing) {
+      const [updated] = await db
+        .update(watchHistory)
+        .set({ ...data, watchedAt: new Date() })
+        .where(eq(watchHistory.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [newHistory] = await db.insert(watchHistory).values(data).returning();
+      return newHistory;
+    }
+  }
+
+  async markAsWatched(profileId: string, contentId: string): Promise<void> {
+    await this.updateWatchProgress({
+      profileId,
+      contentId,
+      progress: 100,
+      completed: true,
+    });
+  }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

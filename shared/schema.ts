@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, index, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -39,3 +39,71 @@ export const insertContentSchema = createInsertSchema(content).omit({
 
 export type InsertContent = z.infer<typeof insertContentSchema>;
 export type Content = typeof content.$inferSelect;
+
+// Session storage table.
+// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+export const sessions = pgTable(
+  "sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: jsonb("sess").notNull(),
+    expire: timestamp("expire").notNull(),
+  },
+  (table) => [index("IDX_session_expire").on(table.expire)],
+);
+
+// User storage table.
+// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").unique(),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  profileImageUrl: varchar("profile_image_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type UpsertUser = typeof users.$inferInsert;
+export type User = typeof users.$inferSelect;
+
+// Profiles table - Multiple profiles per user (like Netflix)
+export const profiles = pgTable("profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 50 }).notNull(),
+  avatarUrl: varchar("avatar_url"),
+  isKids: boolean("is_kids").default(false),
+  language: varchar("language").default("pt-BR"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertProfileSchema = createInsertSchema(profiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertProfile = z.infer<typeof insertProfileSchema>;
+export type Profile = typeof profiles.$inferSelect;
+
+// Watch History table
+export const watchHistory = pgTable("watch_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  profileId: varchar("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  contentId: varchar("content_id").notNull().references(() => content.id, { onDelete: "cascade" }),
+  watchedAt: timestamp("watched_at").defaultNow(),
+  progress: integer("progress").default(0), // Progress percentage (0-100)
+  episodeNumber: integer("episode_number"), // For series/anime
+  seasonNumber: integer("season_number"), // For series/anime
+  completed: boolean("completed").default(false),
+});
+
+export const insertWatchHistorySchema = createInsertSchema(watchHistory).omit({
+  id: true,
+  watchedAt: true,
+});
+
+export type InsertWatchHistory = z.infer<typeof insertWatchHistorySchema>;
+export type WatchHistory = typeof watchHistory.$inferSelect;
