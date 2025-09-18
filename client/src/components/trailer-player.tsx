@@ -43,11 +43,11 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
       clearTimeout(controlsTimeoutRef.current);
     }
     setShowControls(true);
-    controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying && hasStarted) {
+    if (isPlaying && hasStarted) {
+      controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
-      }
-    }, isMobile ? 4000 : 3000);
+      }, isMobile ? 4000 : 3000);
+    }
   }, [isPlaying, hasStarted, isMobile]);
 
   // Video event listeners
@@ -91,9 +91,9 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
 
   const handleTouchToggle = useCallback((e: TouchEvent) => {
     e.preventDefault();
-    setShowControls(!showControls);
+    setShowControls(prev => !prev);
     resetControlsTimeout();
-  }, [showControls, resetControlsTimeout]);
+  }, [resetControlsTimeout]);
 
   useEffect(() => {
     const element = playerRef.current;
@@ -132,10 +132,13 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
       } else {
         await videoRef.current.play();
         setHasStarted(true);
-        resetControlsTimeout();
       }
+      resetControlsTimeout();
     } catch (error) {
       console.warn('Erro ao reproduzir trailer:', error);
+      // Forçar o estado para permitir tentar novamente
+      setIsPlaying(false);
+      setIsBuffering(false);
     }
   }, [isPlaying, resetControlsTimeout]);
 
@@ -191,7 +194,7 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
         ref={videoRef}
         src={videoUrl}
         className="w-full h-full object-contain cursor-pointer"
-        onClick={isMobile ? togglePlay : undefined}
+        onClick={!isMobile ? togglePlay : undefined}
         onTouchStart={isMobile ? (e) => e.stopPropagation() : undefined}
         playsInline={true}
         preload="metadata"
@@ -215,7 +218,7 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
 
       {/* Controls Overlay */}
       <AnimatePresence>
-        {(showControls || !hasStarted) && (
+        {(showControls || !hasStarted || !isPlaying) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -239,7 +242,7 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
             </div>
 
             {/* Center Play Button (when not started or paused) */}
-            {(!hasStarted || !isPlaying) && !isBuffering && (
+            {(!hasStarted || (!isPlaying && hasStarted)) && !isBuffering && (
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
