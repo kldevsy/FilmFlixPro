@@ -185,18 +185,6 @@ export default function Home() {
                       </Button>
                     </div>
                   </div>
-                  {plans.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-yellow-500/30">
-                      <p className="text-yellow-200 text-xs mb-2">Planos disponíveis:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {plans.slice(0, 3).map((plan) => (
-                          <Badge key={plan.id} variant="outline" className="border-yellow-400/50 text-yellow-300 text-xs" data-testid={`badge-plan-${plan.id}`}>
-                            {plan.name} - R$ {(plan.price / 100).toFixed(2)}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             </motion.div>

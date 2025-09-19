@@ -341,7 +341,18 @@ export default function AuthHeader() {
                   >
                     <Avatar className="w-9 h-9 ring-2 ring-purple-500/20 group-hover:ring-purple-500/40 transition-all duration-300">
                       {currentProfile.avatarUrl ? (
-                        <AvatarImage src={currentProfile.avatarUrl} alt={currentProfile.name} className="object-cover" />
+                        currentProfile.avatarUrl.startsWith('data:video/') ? (
+                          <video 
+                            src={currentProfile.avatarUrl} 
+                            className="w-full h-full object-cover rounded-full" 
+                            muted 
+                            loop 
+                            playsInline 
+                            autoPlay
+                          />
+                        ) : (
+                          <AvatarImage src={currentProfile.avatarUrl} alt={currentProfile.name} className="object-cover" />
+                        )
                       ) : (
                         <AvatarFallback className="bg-gradient-to-br from-purple-600 to-pink-600 text-white text-sm font-semibold">
                           {currentProfile.name.charAt(0).toUpperCase()}
@@ -384,7 +395,18 @@ export default function AuthHeader() {
                   >
                     <Avatar className="w-12 h-12 ring-2 ring-purple-500/30 shadow-lg">
                       {currentProfile.avatarUrl ? (
-                        <AvatarImage src={currentProfile.avatarUrl} alt={currentProfile.name} className="object-cover" />
+                        currentProfile.avatarUrl.startsWith('data:video/') ? (
+                          <video 
+                            src={currentProfile.avatarUrl} 
+                            className="w-full h-full object-cover rounded-full" 
+                            muted 
+                            loop 
+                            playsInline 
+                            autoPlay
+                          />
+                        ) : (
+                          <AvatarImage src={currentProfile.avatarUrl} alt={currentProfile.name} className="object-cover" />
+                        )
                       ) : (
                         <AvatarFallback className="bg-gradient-to-br from-purple-600 to-pink-600 text-white text-base font-bold">
                           {currentProfile.name.charAt(0).toUpperCase()}
