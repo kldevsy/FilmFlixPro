@@ -16,6 +16,7 @@ interface ContentModalProps {
 export default function ContentModal({ content, onClose }: ContentModalProps) {
   const { data: allContent = [] } = useContent();
   const [isTrailerPlaying, setIsTrailerPlaying] = useState(false);
+  const [isStreamPlaying, setIsStreamPlaying] = useState(false);
   const [currentEpisode, setCurrentEpisode] = useState(1);
   const [currentSeason, setCurrentSeason] = useState(1);
   
@@ -419,6 +420,11 @@ export default function ContentModal({ content, onClose }: ContentModalProps) {
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                 <Button
                   className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 rounded-lg font-semibold flex-1 sm:flex-none"
+                  onClick={() => {
+                    setIsStreamPlaying(true);
+                    setIsTrailerPlaying(false);
+                  }}
+                  disabled={!content.movieUrl}
                   data-testid="modal-play-button"
                 >
                   <Play className="w-5 h-5 mr-2" />
@@ -439,6 +445,29 @@ export default function ContentModal({ content, onClose }: ContentModalProps) {
           </div>
         </motion.div>
       </motion.div>
+      
+      {/* Stream Player - Fullscreen quando ativo */}
+      {isStreamPlaying && content.movieUrl && (
+        <motion.div
+          className="fixed inset-0 z-[60] bg-black"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          data-testid="stream-overlay"
+        >
+          <StreamPlayer
+            content={content}
+            videoUrl={content.movieUrl}
+            onClose={() => setIsStreamPlaying(false)}
+            episodes={episodes}
+            currentEpisode={currentEpisode}
+            onEpisodeChange={handleEpisodeChange}
+            seasons={seasons}
+            currentSeason={currentSeason}
+            onSeasonChange={handleSeasonChange}
+          />
+        </motion.div>
+      )}
     </AnimatePresence>
   );
 }
