@@ -231,10 +231,15 @@ export default function ProfileSelect() {
   };
 
   const openEditDialog = (profile: Profile) => {
+    if (!profile?.id) {
+      console.error('Invalid profile provided to edit dialog');
+      return;
+    }
+    
     setEditingProfile(profile);
     editForm.reset({
-      name: profile.name,
-      isKids: profile.isKids,
+      name: profile.name || "",
+      isKids: profile.isKids || false,
     });
     // Clear any upload state and store the initial avatar
     setUploadedMedia(null);
