@@ -110,22 +110,15 @@ export default function ContentModal({ content, onClose }: ContentModalProps) {
                 transition={{ delay: 0.3 }}
               >
                 {!isTrailerPlaying ? (
-                  <motion.button
-                    className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full p-6 transition-all duration-300 group"
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
+                  <button
+                    className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full p-6 transition-all duration-300 group hover:scale-110"
                     onClick={() => setIsTrailerPlaying(true)}
                     data-testid="trailer-play-button"
                   >
                     <Play className="w-12 h-12 text-white group-hover:scale-110 transition-transform" fill="white" />
-                  </motion.button>
+                  </button>
                 ) : (
-                  <motion.div
-                    className="w-full h-full relative bg-black rounded-lg overflow-hidden"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.5 }}
-                  >
+                  <div className="w-full h-full relative bg-black rounded-lg overflow-hidden">
                     {content.trailerUrl ? (
                       <TrailerPlayer
                         videoUrl={content.trailerUrl}
@@ -137,7 +130,7 @@ export default function ContentModal({ content, onClose }: ContentModalProps) {
                         <p>Vídeo não disponível</p>
                       </div>
                     )}
-                  </motion.div>
+                  </div>
                 )}
               </motion.div>
             )}

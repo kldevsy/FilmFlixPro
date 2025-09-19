@@ -181,40 +181,23 @@ export default function AuthHeader() {
           {/* Notifications Dropdown */}
           <DropdownMenu open={isNotificationDropdownOpen} onOpenChange={setIsNotificationDropdownOpen}>
             <DropdownMenuTrigger asChild>
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400, damping: 10 }}
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="relative p-2 text-white hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-pink-600/20 rounded-xl transition-all duration-300 border border-transparent hover:border-purple-500/30 shadow-lg hover:shadow-purple-500/20"
+                data-testid="button-notifications"
               >
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  className="relative p-2 text-white hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-pink-600/20 rounded-xl transition-all duration-300 border border-transparent hover:border-purple-500/30 shadow-lg hover:shadow-purple-500/20"
-                  data-testid="button-notifications"
-                >
-                  <motion.div
-                    whileHover={{ rotate: [0, -10, 10, -5, 5, 0] }}
-                    transition={{ duration: 0.5 }}
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs font-bold bg-gradient-to-r from-red-500 to-pink-500 border-none"
+                    data-testid={`badge-unread-count-${unreadCount}`}
                   >
-                    <Bell className="w-5 h-5" />
-                  </motion.div>
-                  {unreadCount > 0 && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute -top-1 -right-1"
-                    >
-                      <Badge 
-                        variant="destructive" 
-                        className="h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs font-bold bg-gradient-to-r from-red-500 to-pink-500 border-none"
-                        data-testid={`badge-unread-count-${unreadCount}`}
-                      >
-                        {unreadCount > 99 ? '99+' : unreadCount}
-                      </Badge>
-                    </motion.div>
-                  )}
-                </Button>
-              </motion.div>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Badge>
+                )}
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent 
               className="w-96 bg-gradient-to-br from-gray-900 via-gray-900 to-purple-900/20 border border-gray-700/50 shadow-2xl backdrop-blur-xl rounded-2xl overflow-hidden" 
@@ -260,12 +243,9 @@ export default function AuthHeader() {
                 ) : (
                   <div className="py-2">
                     {notifications.map((notification) => (
-                      <motion.div
+                      <div
                         key={notification.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        whileHover={{ scale: 1.01 }}
-                        className={`mx-3 my-1 p-3 rounded-xl cursor-pointer transition-all duration-300 group relative ${
+                        className={`mx-3 my-1 p-3 rounded-xl cursor-pointer transition-all duration-200 group relative animate-in fade-in slide-in-from-top-2 ${
                           notification.isRead 
                             ? 'hover:bg-gray-700/30 text-gray-400' 
                             : 'bg-gradient-to-r from-purple-600/20 to-pink-600/20 hover:from-purple-600/30 hover:to-pink-600/30 text-white border border-purple-500/20'
@@ -314,7 +294,7 @@ export default function AuthHeader() {
                             )}
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -325,56 +305,39 @@ export default function AuthHeader() {
           {/* Profile Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 400, damping: 10 }}
+              <Button 
+                variant="ghost" 
+                className="group flex items-center space-x-3 text-white hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-pink-600/20 rounded-xl px-4 py-2 transition-all duration-300 border border-transparent hover:border-purple-500/30 shadow-lg hover:shadow-purple-500/20 hover:scale-[1.02]"
+                data-testid="button-profile-menu"
               >
-                <Button 
-                  variant="ghost" 
-                  className="group flex items-center space-x-3 text-white hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-pink-600/20 rounded-xl px-4 py-2 transition-all duration-300 border border-transparent hover:border-purple-500/30 shadow-lg hover:shadow-purple-500/20"
-                  data-testid="button-profile-menu"
-                >
-                  <motion.div
-                    whileHover={{ rotate: 5 }}
-                    transition={{ type: "spring", stiffness: 300 }}
-                  >
-                    <Avatar className="w-9 h-9 ring-2 ring-purple-500/20 group-hover:ring-purple-500/40 transition-all duration-300">
-                      {currentProfile.avatarUrl ? (
-                        currentProfile.avatarUrl.startsWith('data:video/') ? (
-                          <video 
-                            src={currentProfile.avatarUrl} 
-                            className="w-full h-full object-cover rounded-full" 
-                            muted 
-                            loop 
-                            playsInline 
-                            autoPlay
-                          />
-                        ) : (
-                          <AvatarImage src={currentProfile.avatarUrl} alt={currentProfile.name} className="object-cover" />
-                        )
-                      ) : (
-                        <AvatarFallback className="bg-gradient-to-br from-purple-600 to-pink-600 text-white text-sm font-semibold">
-                          {currentProfile.name.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                  </motion.div>
-                  <div className="flex flex-col items-start">
-                    <span className="text-sm font-medium text-white/90 group-hover:text-white transition-colors" data-testid={`text-current-profile-${currentProfile.id}`}>
-                      {currentProfile.name}
-                    </span>
-                    <span className="text-xs text-purple-400 font-medium">Perfil ativo</span>
-                  </div>
-                  <motion.div
-                    animate={{ rotate: 0 }}
-                    whileHover={{ rotate: 180 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <ChevronDown className="w-4 h-4 ml-1 text-purple-400 group-hover:text-purple-300 transition-colors" />
-                  </motion.div>
-                </Button>
-              </motion.div>
+                <Avatar className="w-9 h-9 ring-2 ring-purple-500/20 group-hover:ring-purple-500/40 transition-all duration-300 group-hover:rotate-1">
+                  {currentProfile.avatarUrl ? (
+                    currentProfile.avatarUrl.startsWith('data:video/') ? (
+                      <video 
+                        src={currentProfile.avatarUrl} 
+                        className="w-full h-full object-cover rounded-full" 
+                        muted 
+                        loop 
+                        playsInline 
+                        autoPlay
+                      />
+                    ) : (
+                      <AvatarImage src={currentProfile.avatarUrl} alt={currentProfile.name} className="object-cover" />
+                    )
+                  ) : (
+                    <AvatarFallback className="bg-gradient-to-br from-purple-600 to-pink-600 text-white text-sm font-semibold">
+                      {currentProfile.name.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  )}
+                </Avatar>
+                <div className="flex flex-col items-start">
+                  <span className="text-sm font-medium text-white/90 group-hover:text-white transition-colors" data-testid={`text-current-profile-${currentProfile.id}`}>
+                    {currentProfile.name}
+                  </span>
+                  <span className="text-xs text-purple-400 font-medium">Perfil ativo</span>
+                </div>
+                <ChevronDown className="w-4 h-4 ml-1 text-purple-400 group-hover:text-purple-300 transition-colors group-hover:rotate-180 transition-transform duration-300" />
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent 
               className="w-80 bg-gradient-to-br from-gray-900 via-gray-900 to-purple-900/20 border border-gray-700/50 shadow-2xl backdrop-blur-xl rounded-2xl overflow-hidden" 
