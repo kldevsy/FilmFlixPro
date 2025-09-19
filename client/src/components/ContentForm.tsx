@@ -32,6 +32,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus } from "lucide-react";
 import { insertContentSchema, type InsertContent, type Content } from "@shared/schema";
+import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -70,8 +71,14 @@ export default function ContentForm({ open, onClose, mode, content }: ContentFor
   const [cast, setCast] = useState<string[]>([]);
   const [newCastMember, setNewCastMember] = useState("");
 
-  const form = useForm<InsertContent>({
-    resolver: zodResolver(insertContentSchema),
+  const formSchema = insertContentSchema.extend({
+    movieUrl: z.string().url({ message: "URL inválida" }).min(1, { message: "Link do filme é obrigatório" })
+  });
+  
+  type FormData = z.infer<typeof formSchema>;
+
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       title: "",
       description: "",
