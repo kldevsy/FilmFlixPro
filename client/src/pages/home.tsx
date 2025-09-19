@@ -1,5 +1,4 @@
 import { motion } from "framer-motion";
-import Navigation from "@/components/navigation";
 import AuthHeader from "@/components/auth-header";
 import HeroCarousel from "@/components/hero-carousel";
 import AdvancedFilters, { type FilterState } from "@/components/advanced-filters";
@@ -114,7 +113,6 @@ export default function Home() {
   return (
     <div className="min-h-screen overflow-x-hidden">
       <AuthHeader />
-      <Navigation />
       <HeroCarousel />
       <AdvancedFilters 
         selectedCategory={selectedCategory} 
