@@ -25,7 +25,9 @@ type Profile = {
   updatedAt: Date;
 };
 
-const createProfileSchema = insertProfileSchema.extend({
+const createProfileSchema = insertProfileSchema.omit({
+  userId: true,
+}).extend({
   name: z.string().min(1, "Nome é obrigatório").max(50, "Nome deve ter no máximo 50 caracteres"),
 });
 
@@ -49,20 +51,13 @@ export default function ProfileSelect() {
 
   const createProfileMutation = useMutation({
     mutationFn: async (data: { name: string; isKids: boolean }) => {
-      console.log('Creating profile with data:', data);
       const response = await apiRequest('POST', '/api/profiles', data);
-      const result = await response.json();
-      console.log('Profile created:', result);
-      return result;
+      return await response.json();
     },
-    onSuccess: (data) => {
-      console.log('Profile creation successful:', data);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       setShowCreateDialog(false);
       form.reset();
-    },
-    onError: (error) => {
-      console.error('Profile creation failed:', error);
     },
   });
 
@@ -132,11 +127,7 @@ export default function ProfileSelect() {
                 <DialogTitle className="text-white">Criar Novo Perfil</DialogTitle>
               </DialogHeader>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit((data) => {
-                  console.log('Form submitted with data:', data);
-                  console.log('Form errors:', form.formState.errors);
-                  createProfileMutation.mutate(data);
-                })} className="space-y-4">
+                <form onSubmit={form.handleSubmit((data) => createProfileMutation.mutate(data))} className="space-y-4">
                   <FormField
                     control={form.control}
                     name="name"
