@@ -3,6 +3,9 @@ import {
   users,
   profiles,
   watchHistory,
+  subscriptionPlans,
+  userSubscriptions,
+  notifications,
   type Content,
   type InsertContent,
   type User,
@@ -10,7 +13,13 @@ import {
   type Profile,
   type InsertProfile,
   type WatchHistory,
-  type InsertWatchHistory
+  type InsertWatchHistory,
+  type SubscriptionPlan,
+  type InsertSubscriptionPlan,
+  type UserSubscription,
+  type InsertUserSubscription,
+  type Notification,
+  type InsertNotification
 } from "@shared/schema";
 import { getDb, hasDb } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -51,6 +60,34 @@ export interface IStorage {
   getContinueWatching(profileId: string): Promise<any[]>;
   updateWatchProgress(data: InsertWatchHistory): Promise<WatchHistory>;
   markAsWatched(profileId: string, contentId: string): Promise<void>;
+  
+  // Subscription Plans operations
+  getSubscriptionPlans(): Promise<SubscriptionPlan[]>;
+  getActiveSubscriptionPlans(): Promise<SubscriptionPlan[]>;
+  createSubscriptionPlan(plan: InsertSubscriptionPlan): Promise<SubscriptionPlan>;
+  updateSubscriptionPlan(id: string, updates: Partial<InsertSubscriptionPlan>): Promise<SubscriptionPlan>;
+  deleteSubscriptionPlan(id: string): Promise<void>;
+  
+  // User Subscriptions operations
+  getUserSubscription(userId: string): Promise<UserSubscription | undefined>;
+  getUserActiveSubscription(userId: string): Promise<UserSubscription | undefined>;
+  createUserSubscription(subscription: InsertUserSubscription): Promise<UserSubscription>;
+  updateUserSubscription(id: string, updates: Partial<InsertUserSubscription>): Promise<UserSubscription>;
+  extendUserSubscription(userId: string, additionalDays: number): Promise<UserSubscription>;
+  cancelUserSubscription(userId: string): Promise<UserSubscription>;
+  checkSubscriptionExpiry(userId: string): Promise<boolean>;
+  
+  // Admin user management operations
+  getAllUsers(): Promise<User[]>;
+  updateUser(id: string, updates: Partial<UpsertUser>): Promise<User>;
+  
+  // Notifications operations
+  getUserNotifications(userId: string): Promise<Notification[]>;
+  getUnreadNotifications(userId: string): Promise<Notification[]>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationAsRead(id: string): Promise<Notification>;
+  markAllNotificationsAsRead(userId: string): Promise<void>;
+  deleteNotification(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -58,12 +95,18 @@ export class DatabaseStorage implements IStorage {
   private memoryUsers: Map<string, User>;
   private memoryProfiles: Map<string, Profile>;
   private memoryWatchHistory: Map<string, WatchHistory>;
+  private memorySubscriptionPlans: Map<string, SubscriptionPlan>;
+  private memoryUserSubscriptions: Map<string, UserSubscription>;
+  private memoryNotifications: Map<string, Notification>;
 
   constructor() {
     this.memoryContent = new Map();
     this.memoryUsers = new Map();
     this.memoryProfiles = new Map();
     this.memoryWatchHistory = new Map();
+    this.memorySubscriptionPlans = new Map();
+    this.memoryUserSubscriptions = new Map();
+    this.memoryNotifications = new Map();
     this.seedData();
   }
 
@@ -339,6 +382,45 @@ export class DatabaseStorage implements IStorage {
         createdAt: new Date()
       };
       this.memoryContent.set(id, content);
+    });
+
+    // Seed subscription plans
+    const samplePlans: Omit<SubscriptionPlan, "id" | "createdAt" | "updatedAt">[] = [
+      {
+        name: "Mensal",
+        description: "Plano mensal com acesso completo",
+        durationDays: 30,
+        price: 1999, // R$ 19,99 in cents
+        isActive: true,
+        features: ["HD Quality", "Dispositivos ilimitados", "Download offline", "Sem anúncios"]
+      },
+      {
+        name: "Anual",
+        description: "Plano anual com desconto especial",
+        durationDays: 365,
+        price: 19999, // R$ 199,99 in cents
+        isActive: true,
+        features: ["HD Quality", "Dispositivos ilimitados", "Download offline", "Sem anúncios", "Conteúdo exclusivo"]
+      },
+      {
+        name: "Semanal",
+        description: "Teste por uma semana",
+        durationDays: 7,
+        price: 599, // R$ 5,99 in cents
+        isActive: true,
+        features: ["HD Quality", "2 dispositivos", "Sem anúncios"]
+      }
+    ];
+
+    samplePlans.forEach(plan => {
+      const id = randomUUID();
+      const subscriptionPlan: SubscriptionPlan = {
+        ...plan,
+        id,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      this.memorySubscriptionPlans.set(id, subscriptionPlan);
     });
   }
 
@@ -917,6 +999,233 @@ export class DatabaseStorage implements IStorage {
       progress: 100,
       completed: true,
     });
+  }
+
+  // Subscription Plans operations
+  async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+    return Array.from(this.memorySubscriptionPlans.values());
+  }
+
+  async getActiveSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+    return Array.from(this.memorySubscriptionPlans.values()).filter(plan => plan.isActive);
+  }
+
+  async createSubscriptionPlan(planData: InsertSubscriptionPlan): Promise<SubscriptionPlan> {
+    const id = randomUUID();
+    const plan: SubscriptionPlan = {
+      ...planData,
+      id,
+      description: planData.description ?? null,
+      isActive: planData.isActive ?? null,
+      features: planData.features ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.memorySubscriptionPlans.set(id, plan);
+    return plan;
+  }
+
+  async updateSubscriptionPlan(id: string, updates: Partial<InsertSubscriptionPlan>): Promise<SubscriptionPlan> {
+    const existing = this.memorySubscriptionPlans.get(id);
+    if (!existing) {
+      throw new Error(`Subscription plan with id ${id} not found`);
+    }
+    const updatedPlan: SubscriptionPlan = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date()
+    };
+    this.memorySubscriptionPlans.set(id, updatedPlan);
+    return updatedPlan;
+  }
+
+  async deleteSubscriptionPlan(id: string): Promise<void> {
+    this.memorySubscriptionPlans.delete(id);
+  }
+
+  // User Subscriptions operations
+  async getUserSubscription(userId: string): Promise<UserSubscription | undefined> {
+    return Array.from(this.memoryUserSubscriptions.values())
+      .find(sub => sub.userId === userId);
+  }
+
+  async getUserActiveSubscription(userId: string): Promise<UserSubscription | undefined> {
+    const now = new Date();
+    return Array.from(this.memoryUserSubscriptions.values())
+      .find(sub => sub.userId === userId && sub.isActive && new Date(sub.endDate) > now);
+  }
+
+  async createUserSubscription(subscriptionData: InsertUserSubscription): Promise<UserSubscription> {
+    const id = randomUUID();
+    const subscription: UserSubscription = {
+      ...subscriptionData,
+      id,
+      startDate: subscriptionData.startDate ?? new Date(),
+      isActive: subscriptionData.isActive ?? null,
+      autoRenew: subscriptionData.autoRenew ?? null,
+      paymentStatus: subscriptionData.paymentStatus ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.memoryUserSubscriptions.set(id, subscription);
+    return subscription;
+  }
+
+  async updateUserSubscription(id: string, updates: Partial<InsertUserSubscription>): Promise<UserSubscription> {
+    const existing = this.memoryUserSubscriptions.get(id);
+    if (!existing) {
+      throw new Error(`User subscription with id ${id} not found`);
+    }
+    const updatedSubscription: UserSubscription = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date()
+    };
+    this.memoryUserSubscriptions.set(id, updatedSubscription);
+    return updatedSubscription;
+  }
+
+  async extendUserSubscription(userId: string, additionalDays: number): Promise<UserSubscription> {
+    const subscription = await this.getUserActiveSubscription(userId);
+    if (!subscription) {
+      throw new Error(`No active subscription found for user ${userId}`);
+    }
+    
+    const currentEndDate = new Date(subscription.endDate);
+    const newEndDate = new Date(currentEndDate.getTime() + additionalDays * 24 * 60 * 60 * 1000);
+    
+    return this.updateUserSubscription(subscription.id, {
+      endDate: newEndDate
+    });
+  }
+
+  async cancelUserSubscription(userId: string): Promise<UserSubscription> {
+    const subscription = await this.getUserActiveSubscription(userId);
+    if (!subscription) {
+      throw new Error(`No active subscription found for user ${userId}`);
+    }
+    
+    return this.updateUserSubscription(subscription.id, {
+      isActive: false,
+      autoRenew: false,
+      paymentStatus: "cancelled"
+    });
+  }
+
+  async checkSubscriptionExpiry(userId: string): Promise<boolean> {
+    const subscription = await this.getUserActiveSubscription(userId);
+    return subscription !== undefined;
+  }
+
+  // Admin user management operations
+  async getAllUsers(): Promise<User[]> {
+    if (!hasDb()) {
+      return Array.from(this.memoryUsers.values());
+    }
+    try {
+      const db = getDb();
+      return await db.select().from(users);
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      return Array.from(this.memoryUsers.values());
+    }
+  }
+
+  async updateUser(id: string, updates: Partial<UpsertUser>): Promise<User> {
+    if (!hasDb()) {
+      const existing = this.memoryUsers.get(id);
+      if (!existing) {
+        throw new Error(`User with id ${id} not found`);
+      }
+      const updatedUser: User = {
+        ...existing,
+        ...updates,
+        updatedAt: new Date()
+      };
+      this.memoryUsers.set(id, updatedUser);
+      return updatedUser;
+    }
+    try {
+      const db = getDb();
+      const [updatedUser] = await db
+        .update(users)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(users.id, id))
+        .returning();
+      if (!updatedUser) {
+        throw new Error(`User with id ${id} not found`);
+      }
+      return updatedUser;
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      const existing = this.memoryUsers.get(id);
+      if (!existing) {
+        throw new Error(`User with id ${id} not found`);
+      }
+      const updatedUser: User = {
+        ...existing,
+        ...updates,
+        updatedAt: new Date()
+      };
+      this.memoryUsers.set(id, updatedUser);
+      return updatedUser;
+    }
+  }
+
+  // Notifications operations
+  async getUserNotifications(userId: string): Promise<Notification[]> {
+    return Array.from(this.memoryNotifications.values())
+      .filter(notification => notification.userId === userId)
+      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+  }
+
+  async getUnreadNotifications(userId: string): Promise<Notification[]> {
+    return Array.from(this.memoryNotifications.values())
+      .filter(notification => notification.userId === userId && !notification.isRead)
+      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+  }
+
+  async createNotification(notificationData: InsertNotification): Promise<Notification> {
+    const id = randomUUID();
+    const notification: Notification = {
+      ...notificationData,
+      id,
+      isRead: notificationData.isRead ?? null,
+      actionUrl: notificationData.actionUrl ?? null,
+      metadata: notificationData.metadata ?? null,
+      createdAt: new Date()
+    };
+    this.memoryNotifications.set(id, notification);
+    return notification;
+  }
+
+  async markNotificationAsRead(id: string): Promise<Notification> {
+    const existing = this.memoryNotifications.get(id);
+    if (!existing) {
+      throw new Error(`Notification with id ${id} not found`);
+    }
+    const updatedNotification: Notification = {
+      ...existing,
+      isRead: true
+    };
+    this.memoryNotifications.set(id, updatedNotification);
+    return updatedNotification;
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    Array.from(this.memoryNotifications.values())
+      .filter(notification => notification.userId === userId && !notification.isRead)
+      .forEach(notification => {
+        const updatedNotification: Notification = {
+          ...notification,
+          isRead: true
+        };
+        this.memoryNotifications.set(notification.id, updatedNotification);
+      });
+  }
+
+  async deleteNotification(id: string): Promise<void> {
+    this.memoryNotifications.delete(id);
   }
 }
 

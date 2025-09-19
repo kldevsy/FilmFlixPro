@@ -3,7 +3,14 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { insertProfileSchema, insertWatchHistorySchema, insertContentSchema } from "@shared/schema";
+import { 
+  insertProfileSchema, 
+  insertWatchHistorySchema, 
+  insertContentSchema,
+  insertSubscriptionPlanSchema,
+  insertUserSubscriptionSchema,
+  insertNotificationSchema
+} from "@shared/schema";
 
 // Admin authorization middleware
 const isAdmin = async (req: any, res: any, next: any) => {
@@ -309,6 +316,248 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error in admin bootstrap:", error);
       res.status(500).json({ message: "Falha ao configurar administrador inicial" });
+    }
+  });
+
+  // Admin user management routes
+  app.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Falha ao buscar usuários" });
+    }
+  });
+
+  app.put("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      const user = await storage.updateUser(id, updates);
+      res.json(user);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ message: "Falha ao atualizar usuário" });
+    }
+  });
+
+  // Subscription Plans routes
+  app.get("/api/subscription-plans", async (req, res) => {
+    try {
+      const plans = await storage.getActiveSubscriptionPlans();
+      res.json(plans);
+    } catch (error) {
+      console.error("Error fetching subscription plans:", error);
+      res.status(500).json({ message: "Falha ao buscar planos" });
+    }
+  });
+
+  app.get("/api/admin/subscription-plans", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const plans = await storage.getSubscriptionPlans();
+      res.json(plans);
+    } catch (error) {
+      console.error("Error fetching all subscription plans:", error);
+      res.status(500).json({ message: "Falha ao buscar planos" });
+    }
+  });
+
+  app.post("/api/admin/subscription-plans", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const planData = insertSubscriptionPlanSchema.parse(req.body);
+      const plan = await storage.createSubscriptionPlan(planData);
+      res.json(plan);
+    } catch (error) {
+      console.error("Error creating subscription plan:", error);
+      res.status(500).json({ message: "Falha ao criar plano" });
+    }
+  });
+
+  app.put("/api/admin/subscription-plans/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateSchema = insertSubscriptionPlanSchema.partial();
+      const updates = updateSchema.parse(req.body);
+      const plan = await storage.updateSubscriptionPlan(id, updates);
+      res.json(plan);
+    } catch (error) {
+      console.error("Error updating subscription plan:", error);
+      res.status(500).json({ message: "Falha ao atualizar plano" });
+    }
+  });
+
+  app.delete("/api/admin/subscription-plans/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteSubscriptionPlan(id);
+      res.json({ message: "Plano deletado com sucesso" });
+    } catch (error) {
+      console.error("Error deleting subscription plan:", error);
+      res.status(500).json({ message: "Falha ao deletar plano" });
+    }
+  });
+
+  // User Subscription routes
+  app.get("/api/user/subscription", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const subscription = await storage.getUserActiveSubscription(userId);
+      res.json(subscription);
+    } catch (error) {
+      console.error("Error fetching user subscription:", error);
+      res.status(500).json({ message: "Falha ao buscar assinatura" });
+    }
+  });
+
+  app.post("/api/user/subscription", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const subscriptionData = {
+        ...insertUserSubscriptionSchema.parse(req.body),
+        userId
+      };
+      
+      const subscription = await storage.createUserSubscription(subscriptionData);
+      res.json(subscription);
+    } catch (error) {
+      console.error("Error creating user subscription:", error);
+      res.status(500).json({ message: "Falha ao criar assinatura" });
+    }
+  });
+
+  app.post("/api/admin/users/:userId/extend-subscription", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { days } = req.body;
+      
+      if (!days || days <= 0) {
+        return res.status(400).json({ message: "Número de dias deve ser maior que zero" });
+      }
+      
+      const subscription = await storage.extendUserSubscription(userId, days);
+      res.json(subscription);
+    } catch (error) {
+      console.error("Error extending user subscription:", error);
+      res.status(500).json({ message: "Falha ao estender assinatura" });
+    }
+  });
+
+  app.post("/api/admin/users/:userId/cancel-subscription", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const subscription = await storage.cancelUserSubscription(userId);
+      res.json(subscription);
+    } catch (error) {
+      console.error("Error canceling user subscription:", error);
+      res.status(500).json({ message: "Falha ao cancelar assinatura" });
+    }
+  });
+
+  // Subscription verification middleware for content access
+  const checkSubscription = async (req: any, res: any, next: any) => {
+    try {
+      const userId = req.user.claims.sub;
+      const hasActiveSubscription = await storage.checkSubscriptionExpiry(userId);
+      
+      if (!hasActiveSubscription) {
+        return res.status(403).json({ 
+          message: "Assinatura expirada ou inativa",
+          requiresSubscription: true
+        });
+      }
+      
+      next();
+    } catch (error) {
+      console.error("Error checking subscription:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  };
+
+  // Protected content routes that require active subscription
+  app.get("/api/content/:id/watch", isAuthenticated, checkSubscription, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const content = await storage.getContentById(id);
+      if (!content) {
+        return res.status(404).json({ message: "Conteúdo não encontrado" });
+      }
+      res.json({ message: "Acesso autorizado", content });
+    } catch (error) {
+      console.error("Error accessing content:", error);
+      res.status(500).json({ message: "Falha ao acessar conteúdo" });
+    }
+  });
+
+  // Notifications routes
+  app.get("/api/user/notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const notifications = await storage.getUserNotifications(userId);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ message: "Falha ao buscar notificações" });
+    }
+  });
+
+  app.get("/api/user/notifications/unread", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const notifications = await storage.getUnreadNotifications(userId);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching unread notifications:", error);
+      res.status(500).json({ message: "Falha ao buscar notificações não lidas" });
+    }
+  });
+
+  app.post("/api/user/notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const notificationData = {
+        ...insertNotificationSchema.parse(req.body),
+        userId
+      };
+      
+      const notification = await storage.createNotification(notificationData);
+      res.json(notification);
+    } catch (error) {
+      console.error("Error creating notification:", error);
+      res.status(500).json({ message: "Falha ao criar notificação" });
+    }
+  });
+
+  app.put("/api/user/notifications/:id/read", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const notification = await storage.markNotificationAsRead(id);
+      res.json(notification);
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ message: "Falha ao marcar notificação como lida" });
+    }
+  });
+
+  app.post("/api/user/notifications/read-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.markAllNotificationsAsRead(userId);
+      res.json({ message: "Todas as notificações foram marcadas como lidas" });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ message: "Falha ao marcar todas as notificações como lidas" });
+    }
+  });
+
+  app.delete("/api/user/notifications/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteNotification(id);
+      res.json({ message: "Notificação deletada com sucesso" });
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+      res.status(500).json({ message: "Falha ao deletar notificação" });
     }
   });
 
