@@ -111,31 +111,34 @@ export default function StreamPlayer({
     const video = videoRef.current;
     if (!video) return;
 
-    // Improved time update with less delay using requestAnimationFrame
-    let animationId: number;
+    // Simplified and more reliable time update
     const handleTimeUpdate = () => {
-      if (animationId) cancelAnimationFrame(animationId);
-      animationId = requestAnimationFrame(() => {
-        setCurrentTime(video.currentTime);
-        // Save watch progress for continue watching (throttled to avoid excessive writes)
-        const now = Date.now();
-        if (video.currentTime > 30 && now - lastSavedTimeRef.current > 5000) { // Save every 5 seconds
-          const profileId = localStorage.getItem('selectedProfileId');
-          if (profileId) {
-            const watchKey = `watch_${profileId}_${content.id}`;
+      setCurrentTime(video.currentTime);
+    };
+
+    // Separate function to save watch progress (throttled)
+    const saveWatchProgress = () => {
+      const now = Date.now();
+      if (video.currentTime > 30 && now - lastSavedTimeRef.current > 5000) { // Save every 5 seconds
+        const profileId = localStorage.getItem('selectedProfileId');
+        if (profileId) {
+          const watchKey = `watch_${profileId}_${content.id}`;
+          try {
             localStorage.setItem(watchKey, JSON.stringify({
               currentTime: video.currentTime,
               duration: video.duration,
               lastWatched: now
             }));
             lastSavedTimeRef.current = now;
+          } catch (error) {
+            console.warn('Error saving watch progress:', error);
           }
         }
-      });
+      }
     };
 
     const handleLoadedMetadata = () => {
-      setDuration(video.duration);
+      setDuration(video.duration || 0);
     };
 
     const handlePlay = () => {
@@ -155,7 +158,9 @@ export default function StreamPlayer({
       setIsBuffering(false);
     };
 
+    // Set up event listeners with proper error handling
     video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('timeupdate', saveWatchProgress); // Separate listener for saving progress
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
@@ -182,8 +187,8 @@ export default function StreamPlayer({
     }
 
     return () => {
-      if (animationId) cancelAnimationFrame(animationId);
       video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('timeupdate', saveWatchProgress);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
