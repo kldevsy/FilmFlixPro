@@ -175,3 +175,56 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+
+// Seasons table - For organizing episodes in series/anime
+export const seasons = pgTable("seasons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contentId: varchar("content_id").notNull().references(() => content.id, { onDelete: "cascade" }),
+  seasonNumber: integer("season_number").notNull(),
+  title: text("title"), // Optional custom season title
+  description: text("description"), // Optional season description
+  posterUrl: text("poster_url"), // Optional custom poster for season
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_seasons_content").on(table.contentId),
+  index("idx_seasons_unique").on(table.contentId, table.seasonNumber), // Unique constraint on content + season number
+]);
+
+export const insertSeasonSchema = createInsertSchema(seasons).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSeason = z.infer<typeof insertSeasonSchema>;
+export type Season = typeof seasons.$inferSelect;
+
+// Episodes table - Individual episodes within seasons
+export const episodes = pgTable("episodes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contentId: varchar("content_id").notNull().references(() => content.id, { onDelete: "cascade" }),
+  seasonId: varchar("season_id").notNull().references(() => seasons.id, { onDelete: "cascade" }),
+  episodeNumber: integer("episode_number").notNull(),
+  title: text("title").notNull(),
+  synopsis: text("synopsis"), // Episode description
+  duration: text("duration"), // "24min", "42min"
+  videoUrl: text("video_url").notNull(), // Direct link to episode video
+  thumbnailUrl: text("thumbnail_url"), // Episode thumbnail
+  airDate: text("air_date"), // When the episode was released
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_episodes_season").on(table.seasonId),
+  index("idx_episodes_content").on(table.contentId),
+  index("idx_episodes_unique").on(table.seasonId, table.episodeNumber), // Unique constraint on season + episode number
+]);
+
+export const insertEpisodeSchema = createInsertSchema(episodes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertEpisode = z.infer<typeof insertEpisodeSchema>;
+export type Episode = typeof episodes.$inferSelect;

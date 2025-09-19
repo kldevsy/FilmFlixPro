@@ -6,6 +6,8 @@ import {
   subscriptionPlans,
   userSubscriptions,
   notifications,
+  seasons,
+  episodes,
   type Content,
   type InsertContent,
   type User,
@@ -19,7 +21,11 @@ import {
   type UserSubscription,
   type InsertUserSubscription,
   type Notification,
-  type InsertNotification
+  type InsertNotification,
+  type Season,
+  type InsertSeason,
+  type Episode,
+  type InsertEpisode
 } from "@shared/schema";
 import { getDb, hasDb } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -88,6 +94,25 @@ export interface IStorage {
   markNotificationAsRead(id: string): Promise<Notification>;
   markAllNotificationsAsRead(userId: string): Promise<void>;
   deleteNotification(id: string): Promise<void>;
+  
+  // Admin notification broadcast operations
+  broadcastNotification(notification: Omit<InsertNotification, 'userId'>): Promise<{sent: number, failed: number}>;
+  sendNotificationToUsers(userIds: string[], notification: Omit<InsertNotification, 'userId'>): Promise<{sent: number, failed: number}>;
+  
+  // Seasons operations
+  getSeasonsByContent(contentId: string): Promise<Season[]>;
+  getSeason(id: string): Promise<Season | undefined>;
+  createSeason(season: InsertSeason): Promise<Season>;
+  updateSeason(id: string, updates: Partial<InsertSeason>): Promise<Season>;
+  deleteSeason(id: string): Promise<void>;
+  
+  // Episodes operations
+  getEpisodesBySeason(seasonId: string): Promise<Episode[]>;
+  getEpisodesByContent(contentId: string, seasonNumber?: number): Promise<Episode[]>;
+  getEpisode(id: string): Promise<Episode | undefined>;
+  createEpisode(episode: InsertEpisode): Promise<Episode>;
+  updateEpisode(id: string, updates: Partial<InsertEpisode>): Promise<Episode>;
+  deleteEpisode(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -98,6 +123,8 @@ export class DatabaseStorage implements IStorage {
   private memorySubscriptionPlans: Map<string, SubscriptionPlan>;
   private memoryUserSubscriptions: Map<string, UserSubscription>;
   private memoryNotifications: Map<string, Notification>;
+  private memorySeasons: Map<string, Season>;
+  private memoryEpisodes: Map<string, Episode>;
 
   constructor() {
     this.memoryContent = new Map();
@@ -107,6 +134,8 @@ export class DatabaseStorage implements IStorage {
     this.memorySubscriptionPlans = new Map();
     this.memoryUserSubscriptions = new Map();
     this.memoryNotifications = new Map();
+    this.memorySeasons = new Map();
+    this.memoryEpisodes = new Map();
     this.seedData();
   }
 
@@ -1237,6 +1266,160 @@ export class DatabaseStorage implements IStorage {
 
   async deleteNotification(id: string): Promise<void> {
     this.memoryNotifications.delete(id);
+  }
+
+  // Admin notification broadcast operations
+  async broadcastNotification(notification: Omit<InsertNotification, 'userId'>): Promise<{sent: number, failed: number}> {
+    const users = Array.from(this.memoryUsers.values());
+    return this.sendNotificationToUsers(users.map(u => u.id), notification);
+  }
+
+  async sendNotificationToUsers(userIds: string[], notification: Omit<InsertNotification, 'userId'>): Promise<{sent: number, failed: number}> {
+    let sent = 0;
+    let failed = 0;
+
+    for (const userId of userIds) {
+      try {
+        const fullNotification: InsertNotification = {
+          ...notification,
+          userId
+        };
+        await this.createNotification(fullNotification);
+        sent++;
+      } catch (error) {
+        console.error(`Failed to send notification to user ${userId}:`, error);
+        failed++;
+      }
+    }
+
+    return { sent, failed };
+  }
+
+  // Seasons operations
+  async getSeasonsByContent(contentId: string): Promise<Season[]> {
+    return Array.from(this.memorySeasons.values())
+      .filter(season => season.contentId === contentId)
+      .sort((a, b) => a.seasonNumber - b.seasonNumber);
+  }
+
+  async getSeason(id: string): Promise<Season | undefined> {
+    return this.memorySeasons.get(id);
+  }
+
+  async createSeason(season: InsertSeason): Promise<Season> {
+    const id = randomUUID();
+    const newSeason: Season = {
+      id,
+      ...season,
+      title: season.title ?? null,
+      description: season.description ?? null,
+      posterUrl: season.posterUrl ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.memorySeasons.set(id, newSeason);
+    return newSeason;
+  }
+
+  async updateSeason(id: string, updates: Partial<InsertSeason>): Promise<Season> {
+    const existingSeason = this.memorySeasons.get(id);
+    if (!existingSeason) {
+      throw new Error('Season not found');
+    }
+    
+    const updatedSeason: Season = {
+      ...existingSeason,
+      ...updates,
+      updatedAt: new Date()
+    };
+    this.memorySeasons.set(id, updatedSeason);
+    return updatedSeason;
+  }
+
+  async deleteSeason(id: string): Promise<void> {
+    // Also delete all episodes in this season
+    const episodesToDelete = Array.from(this.memoryEpisodes.values())
+      .filter(episode => episode.seasonId === id);
+    
+    for (const episode of episodesToDelete) {
+      this.memoryEpisodes.delete(episode.id);
+    }
+    
+    this.memorySeasons.delete(id);
+  }
+
+  // Episodes operations
+  async getEpisodesBySeason(seasonId: string): Promise<Episode[]> {
+    return Array.from(this.memoryEpisodes.values())
+      .filter(episode => episode.seasonId === seasonId)
+      .sort((a, b) => a.episodeNumber - b.episodeNumber);
+  }
+
+  async getEpisodesByContent(contentId: string, seasonNumber?: number): Promise<Episode[]> {
+    let episodes = Array.from(this.memoryEpisodes.values())
+      .filter(episode => episode.contentId === contentId);
+
+    if (seasonNumber !== undefined) {
+      const season = Array.from(this.memorySeasons.values())
+        .find(s => s.contentId === contentId && s.seasonNumber === seasonNumber);
+      
+      if (season) {
+        episodes = episodes.filter(episode => episode.seasonId === season.id);
+      } else {
+        return [];
+      }
+    }
+
+    return episodes.sort((a, b) => {
+      // First sort by season, then by episode
+      const seasonA = this.memorySeasons.get(a.seasonId);
+      const seasonB = this.memorySeasons.get(b.seasonId);
+      
+      if (seasonA && seasonB && seasonA.seasonNumber !== seasonB.seasonNumber) {
+        return seasonA.seasonNumber - seasonB.seasonNumber;
+      }
+      
+      return a.episodeNumber - b.episodeNumber;
+    });
+  }
+
+  async getEpisode(id: string): Promise<Episode | undefined> {
+    return this.memoryEpisodes.get(id);
+  }
+
+  async createEpisode(episode: InsertEpisode): Promise<Episode> {
+    const id = randomUUID();
+    const newEpisode: Episode = {
+      id,
+      ...episode,
+      synopsis: episode.synopsis ?? null,
+      duration: episode.duration ?? null,
+      thumbnailUrl: episode.thumbnailUrl ?? null,
+      airDate: episode.airDate ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.memoryEpisodes.set(id, newEpisode);
+    return newEpisode;
+  }
+
+  async updateEpisode(id: string, updates: Partial<InsertEpisode>): Promise<Episode> {
+    const existingEpisode = this.memoryEpisodes.get(id);
+    if (!existingEpisode) {
+      throw new Error('Episode not found');
+    }
+    
+    const updatedEpisode: Episode = {
+      ...existingEpisode,
+      ...updates,
+      updatedAt: new Date()
+    };
+    this.memoryEpisodes.set(id, updatedEpisode);
+    return updatedEpisode;
+  }
+
+  async deleteEpisode(id: string): Promise<void> {
+    this.memoryEpisodes.delete(id);
   }
 }
 

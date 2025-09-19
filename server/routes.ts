@@ -9,7 +9,9 @@ import {
   insertContentSchema,
   insertSubscriptionPlanSchema,
   insertUserSubscriptionSchema,
-  insertNotificationSchema
+  insertNotificationSchema,
+  insertSeasonSchema,
+  insertEpisodeSchema
 } from "@shared/schema";
 
 // Admin authorization middleware
@@ -285,6 +287,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting content:", error);
       res.status(500).json({ message: "Falha ao deletar conteúdo" });
+    }
+  });
+
+  // Seasons routes - Public endpoints for fetching
+  app.get("/api/content/:contentId/seasons", isAuthenticated, async (req, res) => {
+    try {
+      const { contentId } = req.params;
+      const seasons = await storage.getSeasonsByContent(contentId);
+      res.json(seasons);
+    } catch (error) {
+      console.error("Error fetching seasons:", error);
+      res.status(500).json({ message: "Falha ao buscar temporadas" });
+    }
+  });
+
+  app.get("/api/seasons/:seasonId/episodes", isAuthenticated, async (req, res) => {
+    try {
+      const { seasonId } = req.params;
+      const episodes = await storage.getEpisodesBySeason(seasonId);
+      res.json(episodes);
+    } catch (error) {
+      console.error("Error fetching episodes:", error);
+      res.status(500).json({ message: "Falha ao buscar episódios" });
+    }
+  });
+
+  app.get("/api/content/:contentId/episodes", isAuthenticated, async (req, res) => {
+    try {
+      const { contentId } = req.params;
+      const seasonNumber = req.query.season ? parseInt(req.query.season as string) : undefined;
+      const episodes = await storage.getEpisodesByContent(contentId, seasonNumber);
+      res.json(episodes);
+    } catch (error) {
+      console.error("Error fetching episodes:", error);
+      res.status(500).json({ message: "Falha ao buscar episódios" });
+    }
+  });
+
+  // Admin seasons routes
+  app.post("/api/admin/content/:contentId/seasons", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { contentId } = req.params;
+      const seasonData = insertSeasonSchema.parse({ ...req.body, contentId });
+      const season = await storage.createSeason(seasonData);
+      res.json(season);
+    } catch (error) {
+      console.error("Error creating season:", error);
+      res.status(500).json({ message: "Falha ao criar temporada" });
+    }
+  });
+
+  app.put("/api/admin/seasons/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateSchema = insertSeasonSchema.partial();
+      const updates = updateSchema.parse(req.body);
+      const season = await storage.updateSeason(id, updates);
+      res.json(season);
+    } catch (error) {
+      console.error("Error updating season:", error);
+      res.status(500).json({ message: "Falha ao atualizar temporada" });
+    }
+  });
+
+  app.delete("/api/admin/seasons/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteSeason(id);
+      res.json({ message: "Temporada deletada com sucesso" });
+    } catch (error) {
+      console.error("Error deleting season:", error);
+      res.status(500).json({ message: "Falha ao deletar temporada" });
+    }
+  });
+
+  // Admin episodes routes
+  app.post("/api/admin/seasons/:seasonId/episodes", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { seasonId } = req.params;
+      const season = await storage.getSeason(seasonId);
+      if (!season) {
+        return res.status(404).json({ message: "Temporada não encontrada" });
+      }
+      
+      const episodeData = insertEpisodeSchema.parse({ 
+        ...req.body, 
+        seasonId, 
+        contentId: season.contentId 
+      });
+      const episode = await storage.createEpisode(episodeData);
+      res.json(episode);
+    } catch (error) {
+      console.error("Error creating episode:", error);
+      res.status(500).json({ message: "Falha ao criar episódio" });
+    }
+  });
+
+  app.put("/api/admin/episodes/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateSchema = insertEpisodeSchema.partial();
+      const updates = updateSchema.parse(req.body);
+      const episode = await storage.updateEpisode(id, updates);
+      res.json(episode);
+    } catch (error) {
+      console.error("Error updating episode:", error);
+      res.status(500).json({ message: "Falha ao atualizar episódio" });
+    }
+  });
+
+  app.delete("/api/admin/episodes/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteEpisode(id);
+      res.json({ message: "Episódio deletado com sucesso" });
+    } catch (error) {
+      console.error("Error deleting episode:", error);
+      res.status(500).json({ message: "Falha ao deletar episódio" });
+    }
+  });
+
+  // Admin notification broadcast routes
+  app.post("/api/admin/notifications/send", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { userIds, ...notificationData } = req.body;
+      
+      // Validate the notification data
+      const notificationSchema = insertNotificationSchema.omit({ userId: true });
+      const validatedNotification = notificationSchema.parse(notificationData);
+      
+      let result;
+      if (userIds && Array.isArray(userIds) && userIds.length > 0) {
+        // Send to specific users
+        result = await storage.sendNotificationToUsers(userIds, validatedNotification);
+      } else {
+        // Broadcast to all users
+        result = await storage.broadcastNotification(validatedNotification);
+      }
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error sending notifications:", error);
+      res.status(500).json({ message: "Falha ao enviar notificações" });
     }
   });
 
