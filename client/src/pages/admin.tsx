@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,13 +6,26 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit, Trash2, Users, Search, Filter, Grid, List } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Plus, Edit, Trash2, Users, Search, Filter, Grid, List, Crown } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAdmin } from "@/hooks/useAdmin";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Link } from "wouter";
 import ContentForm from "@/components/ContentForm";
-import { type Content } from "@shared/schema";
+import { type Content, type User } from "@shared/schema";
+
+// User edit schema for form validation
+const userEditSchema = z.object({
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  email: z.string().email("Email inválido").optional(),
+});
 
 
 export default function Admin() {
@@ -26,11 +39,40 @@ export default function Admin() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  
+  // User management states
+  const [userSearchTerm, setUserSearchTerm] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState<string>("all");
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showUserEditDialog, setShowUserEditDialog] = useState(false);
+
+  // User edit form
+  const userEditForm = useForm({
+    resolver: zodResolver(userEditSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+    },
+  });
 
   // Fetch all content
   const { data: contents = [], isLoading: contentsLoading } = useQuery<Content[]>({
     queryKey: ['/api/content'],
   });
+
+  // Fetch all users for admin
+  const { data: users = [], isLoading: usersLoading } = useQuery<User[]>({
+    queryKey: ['/api/admin/users'],
+    enabled: isAdmin,
+  });
+
+  // Sync bootstrap visibility with admin status
+  useEffect(() => {
+    if (isAdmin) {
+      setShowBootstrap(false);
+    }
+  }, [isAdmin]);
 
   // Get unique categories for filter
   const allCategories = useMemo(() => {
@@ -57,6 +99,22 @@ export default function Admin() {
       return matchesSearch && matchesType && matchesCategory;
     });
   }, [contents, searchTerm, typeFilter, categoryFilter]);
+
+  // Filter users based on search and filters
+  const filteredUsers = useMemo(() => {
+    return users.filter(user => {
+      // Search by name or email
+      const searchableText = `${user.firstName || ''} ${user.lastName || ''} ${user.email || ''}`.toLowerCase();
+      const matchesSearch = searchableText.includes(userSearchTerm.toLowerCase());
+      
+      // Filter by role
+      const matchesRole = userRoleFilter === "all" || 
+        (userRoleFilter === "admin" && user.isAdmin) ||
+        (userRoleFilter === "user" && !user.isAdmin);
+      
+      return matchesSearch && matchesRole;
+    });
+  }, [users, userSearchTerm, userRoleFilter]);
 
   // Bootstrap admin mutation
   const bootstrapMutation = useMutation({
@@ -119,6 +177,52 @@ export default function Admin() {
     },
   });
 
+  // Make user admin mutation
+  const makeAdminMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest('POST', `/api/admin/make-user-admin/${userId}`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      toast({
+        title: "Sucesso!",
+        description: "Usuário promovido a administrador.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro",
+        description: "Erro ao promover usuário a administrador.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update user mutation
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, updates }: { userId: string; updates: Partial<User> }) => {
+      const response = await apiRequest('PUT', `/api/admin/users/${userId}`, updates);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setShowUserEditDialog(false);
+      setSelectedUser(null);
+      toast({
+        title: "Sucesso!",
+        description: "Usuário atualizado com sucesso.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar usuário.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDeleteContent = async (content: Content) => {
     if (confirm(`Tem certeza que deseja deletar "${content.title}"?`)) {
       deleteContentMutation.mutate(content.id);
@@ -140,6 +244,44 @@ export default function Admin() {
   const handleCloseForm = () => {
     setFormOpen(false);
     setSelectedContent(null);
+  };
+
+  const handleMakeAdmin = async (user: User) => {
+    if (confirm(`Tem certeza que deseja promover "${user.firstName} ${user.lastName}" a administrador?`)) {
+      makeAdminMutation.mutate(user.id);
+    }
+  };
+
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    userEditForm.reset({
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      email: user.email || "",
+    });
+    setShowUserEditDialog(true);
+  };
+
+  const handleUpdateUser = (data: z.infer<typeof userEditSchema>) => {
+    if (selectedUser) {
+      const updates: Partial<User> = {};
+      if (data.firstName !== selectedUser.firstName) updates.firstName = data.firstName || null;
+      if (data.lastName !== selectedUser.lastName) updates.lastName = data.lastName || null;
+      if (data.email !== selectedUser.email) updates.email = data.email || null;
+      
+      updateUserMutation.mutate({ userId: selectedUser.id, updates });
+    }
+  };
+
+  const formatDate = (date: Date | string | null) => {
+    if (!date) return 'N/A';
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: '2-digit', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(date));
   };
 
   const getTypeLabel = (type: string) => {
@@ -209,7 +351,7 @@ export default function Admin() {
             </TabsTrigger>
             <TabsTrigger value="users" data-testid="tab-users">
               <Users className="w-4 h-4 mr-2" />
-              Usuários
+              Usuários ({users.length})
             </TabsTrigger>
           </TabsList>
 
@@ -388,19 +530,153 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="users" className="space-y-4">
+            {/* User Filters and Search */}
             <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle>Gerenciamento de Usuários</CardTitle>
-                <CardDescription>
-                  Funcionalidade em desenvolvimento
-                </CardDescription>
+              <CardHeader className="pb-4">
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    <span className="font-semibold">Gerenciamento de Usuários</span>
+                    <Badge variant="secondary" className="ml-2" data-testid="badge-user-count">
+                      {filteredUsers.length} de {users.length}
+                    </Badge>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent>
-                <p className="text-gray-400" data-testid="text-users-coming-soon">
-                  Em breve você poderá gerenciar usuários e suas permissões.
-                </p>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      placeholder="Pesquisar por nome ou email..."
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                      className="pl-10"
+                      data-testid="input-user-search"
+                    />
+                  </div>
+                  
+                  {/* Role Filter */}
+                  <Select value={userRoleFilter} onValueChange={setUserRoleFilter}>
+                    <SelectTrigger data-testid="select-role-filter">
+                      <SelectValue placeholder="Filtrar por função" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as funções</SelectItem>
+                      <SelectItem value="admin">Administradores</SelectItem>
+                      <SelectItem value="user">Usuários</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {/* Clear Filters */}
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setUserSearchTerm("");
+                      setUserRoleFilter("all");
+                    }}
+                    data-testid="button-clear-user-filters"
+                  >
+                    Limpar Filtros
+                  </Button>
+                </div>
               </CardContent>
             </Card>
+
+            {/* Users List */}
+            <div className="space-y-4">
+              {usersLoading ? (
+                <Card className="bg-gray-800 border-gray-700">
+                  <CardContent className="text-center py-8">
+                    <div className="text-gray-400" data-testid="text-users-loading">Carregando usuários...</div>
+                  </CardContent>
+                </Card>
+              ) : filteredUsers.length === 0 ? (
+                <Card className="bg-gray-800 border-gray-700">
+                  <CardContent className="text-center py-8">
+                    <Users className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+                    <div className="text-gray-400" data-testid="text-no-users">Nenhum usuário encontrado</div>
+                  </CardContent>
+                </Card>
+              ) : (
+                filteredUsers.map((user) => (
+                  <Card key={user.id} className="bg-gray-800 border-gray-700 hover:border-gray-600 transition-colors" data-testid={`card-user-${user.id}`}>
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-4 flex-1">
+                          {/* Avatar */}
+                          <div className="relative">
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center text-white text-lg font-semibold">
+                              {user.firstName ? user.firstName.charAt(0).toUpperCase() : user.email?.charAt(0).toUpperCase() || '?'}
+                            </div>
+                            {user.isAdmin && (
+                              <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full flex items-center justify-center">
+                                <div className="w-2 h-2 bg-white rounded-full"></div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* User Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-semibold text-lg text-white truncate" data-testid={`text-user-name-${user.id}`}>
+                                {user.firstName && user.lastName 
+                                  ? `${user.firstName} ${user.lastName}` 
+                                  : user.email || 'Usuário sem nome'
+                                }
+                              </h3>
+                              {user.isAdmin && (
+                                <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xs" data-testid={`badge-admin-${user.id}`}>
+                                  Admin
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-gray-400 text-sm mb-2 truncate" data-testid={`text-user-email-${user.id}`}>
+                              {user.email || 'Email não informado'}
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-500">
+                              <span data-testid={`text-user-created-${user.id}`}>
+                                Criado: {formatDate(user.createdAt)}
+                              </span>
+                              <span data-testid={`text-user-updated-${user.id}`}>
+                                Atualizado: {formatDate(user.updatedAt)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Actions */}
+                        <div className="flex flex-col gap-2 shrink-0">
+                          {!user.isAdmin && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleMakeAdmin(user)}
+                              disabled={makeAdminMutation.isPending}
+                              className="text-xs px-3 py-1 h-8"
+                              data-testid={`button-make-admin-${user.id}`}
+                            >
+                              Tornar Admin
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleEditUser(user)}
+                            className="text-xs px-3 py-1 h-8"
+                            data-testid={`button-edit-user-${user.id}`}
+                          >
+                            <Edit className="w-3 h-3 mr-1" />
+                            Editar
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
           </TabsContent>
         </Tabs>
 
@@ -411,6 +687,99 @@ export default function Admin() {
           mode={formMode}
           content={selectedContent ?? undefined}
         />
+
+        {/* User Edit Dialog */}
+        <Dialog open={showUserEditDialog} onOpenChange={setShowUserEditDialog}>
+          <DialogContent className="bg-gray-900 border-gray-700 text-white">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit className="w-5 h-5" />
+                Editar Usuário
+              </DialogTitle>
+              <DialogDescription className="text-gray-400">
+                Atualize as informações do usuário {selectedUser?.firstName} {selectedUser?.lastName}
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...userEditForm}>
+              <form onSubmit={userEditForm.handleSubmit(handleUpdateUser)} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={userEditForm.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nome</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Digite o nome"
+                            {...field}
+                            className="bg-gray-800 border-gray-600"
+                            data-testid="input-edit-firstName"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={userEditForm.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Sobrenome</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Digite o sobrenome"
+                            {...field}
+                            className="bg-gray-800 border-gray-600"
+                            data-testid="input-edit-lastName"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <FormField
+                  control={userEditForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder="Digite o email"
+                          {...field}
+                          className="bg-gray-800 border-gray-600"
+                          data-testid="input-edit-email"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowUserEditDialog(false)}
+                    data-testid="button-cancel-edit-user"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={updateUserMutation.isPending}
+                    data-testid="button-save-edit-user"
+                  >
+                    {updateUserMutation.isPending ? "Salvando..." : "Salvar Alterações"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
