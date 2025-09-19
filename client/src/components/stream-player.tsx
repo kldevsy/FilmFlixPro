@@ -94,30 +94,42 @@ export default function StreamPlayer({
   }, []);
 
   // Controle de visibilidade dos controles
-  const resetControlsTimeout = () => {
+  const resetControlsTimeout = useCallback(() => {
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
     }
     setShowControls(true);
+    
     // No mobile, deixar controles visíveis por mais tempo
     const timeout = isMobile ? 5000 : 3000;
     controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying && !isMobile) setShowControls(false);
+      if (isPlaying && !showSettings && !showEpisodeMenu) {
+        setShowControls(false);
+      }
     }, timeout);
-  };
+  }, [isPlaying, isMobile, showSettings, showEpisodeMenu]);
 
   // Event listeners para o vídeo
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
+    // Reset time tracking when video source changes
+    setCurrentTime(0);
+    setDuration(0);
+    lastSavedTimeRef.current = 0;
+
     // Simplified and more reliable time update
     const handleTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
+      if (video && !video.seeking && !video.paused) {
+        setCurrentTime(video.currentTime);
+      }
     };
 
     // Separate function to save watch progress (throttled)
     const saveWatchProgress = () => {
+      if (!video || video.paused || video.seeking) return;
+      
       const now = Date.now();
       if (video.currentTime > 30 && now - lastSavedTimeRef.current > 5000) { // Save every 5 seconds
         const profileId = localStorage.getItem('selectedProfileId');
@@ -195,7 +207,7 @@ export default function StreamPlayer({
       video.removeEventListener('waiting', handleWaiting);
       video.removeEventListener('canplay', handleCanPlay);
     };
-  }, []);
+  }, [videoUrl, content.id]); // Add dependencies as suggested by architect
 
   const skipForward = useCallback(() => {
     if (!videoRef.current) return;
@@ -209,7 +221,10 @@ export default function StreamPlayer({
 
   // Mouse movement e touch handler with double tap support
   useEffect(() => {
-    const handleMouseMove = () => resetControlsTimeout();
+    const handleMouseMove = () => {
+      if (isPlaying) resetControlsTimeout();
+    };
+    
     const handleTouch = (e: TouchEvent) => {
       const currentTime = Date.now();
       const touch = e.touches[0] || e.changedTouches[0];
@@ -226,15 +241,23 @@ export default function StreamPlayer({
         
         if (leftZone) {
           skipBackward();
+          resetControlsTimeout();
           return;
         } else if (rightZone) {
           skipForward();
+          resetControlsTimeout();
           return;
         }
       }
       
-      // Single tap - toggle controls
-      setShowControls(prev => !prev);
+      // Single tap - show controls and reset timeout
+      if (showControls) {
+        // If controls are visible, hide them
+        setShowControls(false);
+      } else {
+        // If controls are hidden, show them and start timeout
+        resetControlsTimeout();
+      }
       
       // Store tap info for double tap detection
       setLastTapTime(currentTime);
@@ -257,7 +280,7 @@ export default function StreamPlayer({
         }
       };
     }
-  }, [isPlaying, isMobile, showControls, lastTapTime, lastTapX, skipBackward, skipForward]);
+  }, [isPlaying, isMobile, showControls, lastTapTime, lastTapX, skipBackward, skipForward, resetControlsTimeout]);
 
   // Keyboard controls
   useEffect(() => {
@@ -438,9 +461,16 @@ export default function StreamPlayer({
     <div 
       ref={playerRef}
       className="relative w-full h-full bg-black rounded-lg overflow-hidden group"
-      onMouseEnter={() => setShowControls(true)}
+      onMouseEnter={() => {
+        if (!isMobile) {
+          resetControlsTimeout();
+        }
+      }}
       onMouseLeave={() => {
-        if (isPlaying) {
+        if (!isMobile && isPlaying && !showSettings && !showEpisodeMenu) {
+          if (controlsTimeoutRef.current) {
+            clearTimeout(controlsTimeoutRef.current);
+          }
           setShowControls(false);
         }
       }}
