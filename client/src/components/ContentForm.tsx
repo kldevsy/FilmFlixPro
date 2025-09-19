@@ -46,6 +46,20 @@ import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+// Form-specific schemas that handle nullable fields properly
+const formSeasonSchema = insertSeasonSchema.extend({
+  title: insertSeasonSchema.shape.title.nullable().transform(val => val ?? ''),
+  description: insertSeasonSchema.shape.description.nullable().transform(val => val ?? ''),
+  posterUrl: insertSeasonSchema.shape.posterUrl.nullable().transform(val => val ?? ''),
+});
+
+const formEpisodeSchema = insertEpisodeSchema.extend({
+  synopsis: insertEpisodeSchema.shape.synopsis.nullable().transform(val => val ?? ''),
+  duration: insertEpisodeSchema.shape.duration.nullable().transform(val => val ?? ''),
+  thumbnailUrl: insertEpisodeSchema.shape.thumbnailUrl.nullable().transform(val => val ?? ''),
+  airDate: insertEpisodeSchema.shape.airDate.nullable().transform(val => val ?? ''),
+});
+
 interface ContentFormProps {
   open: boolean;
   onClose: () => void;
@@ -238,7 +252,7 @@ export default function ContentForm({ open, onClose, mode, content }: ContentFor
       return response.json();
     },
     onSuccess: () => {
-      refetchSeasons();
+      queryClient.invalidateQueries({ queryKey: ['/api/content', content?.id, 'seasons'] });
       setEditingSeason(null);
       toast({ title: "Sucesso!", description: "Temporada criada com sucesso." });
     },
@@ -253,7 +267,7 @@ export default function ContentForm({ open, onClose, mode, content }: ContentFor
       return response.json();
     },
     onSuccess: () => {
-      refetchSeasons();
+      queryClient.invalidateQueries({ queryKey: ['/api/content', content?.id, 'seasons'] });
       setEditingSeason(null);
       toast({ title: "Sucesso!", description: "Temporada atualizada com sucesso." });
     },
@@ -267,7 +281,7 @@ export default function ContentForm({ open, onClose, mode, content }: ContentFor
       await apiRequest('DELETE', `/api/admin/seasons/${id}`);
     },
     onSuccess: () => {
-      refetchSeasons();
+      queryClient.invalidateQueries({ queryKey: ['/api/content', content?.id, 'seasons'] });
       setSelectedSeasonId(null);
       toast({ title: "Sucesso!", description: "Temporada deletada com sucesso." });
     },
@@ -283,7 +297,7 @@ export default function ContentForm({ open, onClose, mode, content }: ContentFor
       return response.json();
     },
     onSuccess: () => {
-      refetchEpisodes();
+      queryClient.invalidateQueries({ queryKey: ['/api/seasons', selectedSeasonId, 'episodes'] });
       setEditingEpisode(null);
       toast({ title: "Sucesso!", description: "Episódio criado com sucesso." });
     },
@@ -298,7 +312,7 @@ export default function ContentForm({ open, onClose, mode, content }: ContentFor
       return response.json();
     },
     onSuccess: () => {
-      refetchEpisodes();
+      queryClient.invalidateQueries({ queryKey: ['/api/seasons', selectedSeasonId, 'episodes'] });
       setEditingEpisode(null);
       toast({ title: "Sucesso!", description: "Episódio atualizado com sucesso." });
     },
@@ -312,7 +326,7 @@ export default function ContentForm({ open, onClose, mode, content }: ContentFor
       await apiRequest('DELETE', `/api/admin/episodes/${id}`);
     },
     onSuccess: () => {
-      refetchEpisodes();
+      queryClient.invalidateQueries({ queryKey: ['/api/seasons', selectedSeasonId, 'episodes'] });
       toast({ title: "Sucesso!", description: "Episódio deletado com sucesso." });
     },
     onError: () => {
@@ -1074,13 +1088,13 @@ interface SeasonFormProps {
 
 function SeasonForm({ season, onSave, onCancel, isLoading }: SeasonFormProps) {
   const seasonForm = useForm<InsertSeason>({
-    resolver: zodResolver(insertSeasonSchema),
+    resolver: zodResolver(formSeasonSchema),
     defaultValues: {
       contentId: season.contentId,
       seasonNumber: season.seasonNumber,
-      title: season.title || '',
-      description: season.description || '',
-      posterUrl: season.posterUrl || '',
+      title: season.title ?? '',
+      description: season.description ?? '',
+      posterUrl: season.posterUrl ?? '',
     },
   });
 
@@ -1103,6 +1117,8 @@ function SeasonForm({ season, onSave, onCancel, isLoading }: SeasonFormProps) {
                   {...field}
                   value={field.value}
                   onChange={(e) => field.onChange(Number(e.target.value))}
+                  data-testid="input-season-number"
+                  min={1}
                 />
               </FormControl>
               <FormMessage />
@@ -1117,7 +1133,7 @@ function SeasonForm({ season, onSave, onCancel, isLoading }: SeasonFormProps) {
             <FormItem>
               <FormLabel>Título (Opcional)</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="Ex: Primeira Temporada" />
+                <Input {...field} value={field.value || ''} placeholder="Ex: Primeira Temporada" data-testid="input-season-title" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -1131,7 +1147,7 @@ function SeasonForm({ season, onSave, onCancel, isLoading }: SeasonFormProps) {
             <FormItem>
               <FormLabel>Descrição (Opcional)</FormLabel>
               <FormControl>
-                <Textarea {...field} placeholder="Descrição da temporada..." />
+                <Textarea {...field} value={field.value || ''} placeholder="Descrição da temporada..." data-testid="input-season-description" rows={3} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -1145,7 +1161,7 @@ function SeasonForm({ season, onSave, onCancel, isLoading }: SeasonFormProps) {
             <FormItem>
               <FormLabel>URL do Poster (Opcional)</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="https://..." />
+                <Input {...field} value={field.value || ''} placeholder="https://example.com/poster.jpg" data-testid="input-season-poster" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -1153,10 +1169,10 @@ function SeasonForm({ season, onSave, onCancel, isLoading }: SeasonFormProps) {
         />
 
         <div className="flex gap-2 justify-end">
-          <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading} data-testid="button-season-cancel">
             Cancelar
           </Button>
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading} data-testid="button-season-save">
             {isLoading ? "Salvando..." : "Salvar"}
           </Button>
         </div>
@@ -1175,17 +1191,17 @@ interface EpisodeFormProps {
 
 function EpisodeForm({ episode, onSave, onCancel, isLoading }: EpisodeFormProps) {
   const episodeForm = useForm<InsertEpisode>({
-    resolver: zodResolver(insertEpisodeSchema),
+    resolver: zodResolver(formEpisodeSchema),
     defaultValues: {
       contentId: episode.contentId,
       seasonId: episode.seasonId,
       episodeNumber: episode.episodeNumber,
-      title: episode.title,
-      synopsis: episode.synopsis || '',
-      duration: episode.duration || '',
-      videoUrl: episode.videoUrl,
-      thumbnailUrl: episode.thumbnailUrl || '',
-      airDate: episode.airDate || '',
+      title: episode.title ?? '',
+      synopsis: episode.synopsis ?? '',
+      duration: episode.duration ?? '',
+      videoUrl: episode.videoUrl ?? '',
+      thumbnailUrl: episode.thumbnailUrl ?? '',
+      airDate: episode.airDate ?? '',
     },
   });
 
@@ -1209,6 +1225,8 @@ function EpisodeForm({ episode, onSave, onCancel, isLoading }: EpisodeFormProps)
                     {...field}
                     value={field.value}
                     onChange={(e) => field.onChange(Number(e.target.value))}
+                    data-testid="input-episode-number"
+                    min={1}
                   />
                 </FormControl>
                 <FormMessage />
@@ -1223,7 +1241,7 @@ function EpisodeForm({ episode, onSave, onCancel, isLoading }: EpisodeFormProps)
               <FormItem>
                 <FormLabel>Duração</FormLabel>
                 <FormControl>
-                  <Input {...field} placeholder="Ex: 42min" />
+                  <Input {...field} value={field.value || ''} placeholder="Ex: 42min" data-testid="input-episode-duration" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -1238,7 +1256,7 @@ function EpisodeForm({ episode, onSave, onCancel, isLoading }: EpisodeFormProps)
             <FormItem>
               <FormLabel>Título do Episódio</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="Título do episódio..." />
+                <Input {...field} placeholder="Título do episódio..." data-testid="input-episode-title" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -1252,7 +1270,7 @@ function EpisodeForm({ episode, onSave, onCancel, isLoading }: EpisodeFormProps)
             <FormItem>
               <FormLabel>Sinopse (Opcional)</FormLabel>
               <FormControl>
-                <Textarea {...field} placeholder="Descrição do episódio..." />
+                <Textarea {...field} value={field.value || ''} placeholder="Descrição do episódio..." data-testid="input-episode-synopsis" rows={3} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -1266,7 +1284,7 @@ function EpisodeForm({ episode, onSave, onCancel, isLoading }: EpisodeFormProps)
             <FormItem>
               <FormLabel>URL do Vídeo</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="https://..." />
+                <Input {...field} placeholder="https://example.com/video.mp4" data-testid="input-episode-video-url" type="url" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -1280,7 +1298,7 @@ function EpisodeForm({ episode, onSave, onCancel, isLoading }: EpisodeFormProps)
             <FormItem>
               <FormLabel>URL da Miniatura (Opcional)</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="https://..." />
+                <Input {...field} value={field.value || ''} placeholder="https://example.com/thumbnail.jpg" data-testid="input-episode-thumbnail-url" type="url" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -1294,7 +1312,7 @@ function EpisodeForm({ episode, onSave, onCancel, isLoading }: EpisodeFormProps)
             <FormItem>
               <FormLabel>Data de Lançamento (Opcional)</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="Ex: 15 de Janeiro de 2024" />
+                <Input {...field} value={field.value || ''} placeholder="Ex: 15 de Janeiro de 2024" data-testid="input-episode-air-date" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -1302,10 +1320,10 @@ function EpisodeForm({ episode, onSave, onCancel, isLoading }: EpisodeFormProps)
         />
 
         <div className="flex gap-2 justify-end pt-4 border-t">
-          <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading} data-testid="button-episode-cancel">
             Cancelar
           </Button>
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading} data-testid="button-episode-save">
             {isLoading ? "Salvando..." : "Salvar"}
           </Button>
         </div>
