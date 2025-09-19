@@ -13,7 +13,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertProfileSchema } from "@shared/schema";
 import { z } from "zod";
-import { Plus, User, LogOut, Camera, Upload, X } from "lucide-react";
+import { Plus, User, LogOut, Camera, Upload, X, Edit2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 
@@ -36,7 +36,11 @@ export default function ProfileSelect() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [uploadedMedia, setUploadedMedia] = useState<{ dataUrl: string; mimeType: string } | null>(null);
+  const [initialAvatarUrl, setInitialAvatarUrl] = useState<string | null>(null);
+  const [avatarRemoved, setAvatarRemoved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { data: profiles, isLoading } = useQuery<Profile[]>({
@@ -45,6 +49,14 @@ export default function ProfileSelect() {
   });
 
   const form = useForm({
+    resolver: zodResolver(createProfileSchema),
+    defaultValues: {
+      name: "",
+      isKids: false,
+    },
+  });
+
+  const editForm = useForm({
     resolver: zodResolver(createProfileSchema),
     defaultValues: {
       name: "",
@@ -66,6 +78,40 @@ export default function ProfileSelect() {
       setShowCreateDialog(false);
       setUploadedMedia(null);
       form.reset();
+    },
+  });
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: { id: string; name: string; isKids: boolean; avatarUrl?: string | null }) => {
+      const { id, ...updateData } = data;
+      
+      let avatarUrl;
+      if (uploadedMedia) {
+        // New media uploaded
+        avatarUrl = uploadedMedia.dataUrl;
+      } else if (avatarRemoved) {
+        // Avatar was removed
+        avatarUrl = null;
+      } else {
+        // No change to avatar - don't include avatarUrl in payload to leave unchanged
+        // (we don't set avatarUrl at all)
+      }
+      
+      const profileData = {
+        ...updateData,
+        ...(uploadedMedia || avatarRemoved ? { avatarUrl } : {})
+      };
+      
+      const response = await apiRequest('PUT', `/api/profiles/${id}`, profileData);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+      setShowEditDialog(false);
+      setEditingProfile(null);
+      setUploadedMedia(null);
+      setInitialAvatarUrl(null);
+      setAvatarRemoved(false);
     },
   });
 
@@ -142,6 +188,7 @@ export default function ProfileSelect() {
           dataUrl: e.target?.result as string, 
           mimeType: file.type 
         });
+        setAvatarRemoved(false); // Reset removed flag when new media is selected
       };
       reader.readAsDataURL(file);
     }
@@ -149,9 +196,23 @@ export default function ProfileSelect() {
 
   const removeMedia = () => {
     setUploadedMedia(null);
+    setAvatarRemoved(true);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const openEditDialog = (profile: Profile) => {
+    setEditingProfile(profile);
+    editForm.reset({
+      name: profile.name,
+      isKids: profile.isKids,
+    });
+    // Clear any upload state and store the initial avatar
+    setUploadedMedia(null);
+    setInitialAvatarUrl(profile.avatarUrl || null);
+    setAvatarRemoved(false);
+    setShowEditDialog(true);
   };
 
   if (isLoading) {
@@ -179,14 +240,30 @@ export default function ProfileSelect() {
               transition={{ duration: 0.5, delay: index * 0.1 }}
               whileHover={{ scale: 1.05, y: -5 }}
               whileTap={{ scale: 0.95 }}
+              className="relative group"
             >
               <Card 
-                className="bg-gradient-to-br from-gray-800/90 to-gray-900/90 border-gray-700 cursor-pointer hover:border-purple-500/50 transition-all duration-300 group overflow-hidden backdrop-blur-sm"
+                className="bg-gradient-to-br from-gray-800/90 to-gray-900/90 border-gray-700 cursor-pointer hover:border-purple-500/50 transition-all duration-300 overflow-hidden backdrop-blur-sm"
                 onClick={() => selectProfile(profile.id)}
                 data-testid={`profile-${profile.id}`}
               >
                 <CardContent className="p-8 text-center relative">
                   <div className="absolute inset-0 bg-gradient-to-br from-purple-600/10 to-cyan-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  
+                  {/* Edit Button */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditDialog(profile);
+                    }}
+                    className="absolute top-2 right-2 w-8 h-8 p-0 bg-gray-800/80 border-gray-600 hover:bg-purple-600/80 hover:border-purple-500 opacity-0 group-hover:opacity-100 transition-all duration-300 z-20"
+                    data-testid={`button-edit-profile-${profile.id}`}
+                  >
+                    <Edit2 className="w-3 h-3 text-gray-300 group-hover:text-white" />
+                  </Button>
+                  
                   <div className="relative z-10">
                     <div className="relative mb-6">
                       <Avatar className="w-24 h-24 mx-auto ring-4 ring-gray-600 group-hover:ring-purple-500/50 transition-all duration-300">
@@ -401,6 +478,185 @@ export default function ProfileSelect() {
                         </>
                       ) : (
                         'Criar Perfil'
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Profile Dialog */}
+          <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+            <DialogContent className="bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700 max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-white text-2xl font-bold text-center">
+                  ✏️ Editar Perfil
+                </DialogTitle>
+                <p className="text-gray-400 text-center text-sm">
+                  Atualize as informações do perfil
+                </p>
+              </DialogHeader>
+              <Form {...editForm}>
+                <form onSubmit={editForm.handleSubmit((data) => {
+                  if (editingProfile) {
+                    updateProfileMutation.mutate({
+                      ...data,
+                      id: editingProfile.id
+                    });
+                  }
+                })} className="space-y-6">
+                  
+                  {/* Avatar Upload Section */}
+                  <div className="flex flex-col items-center space-y-4">
+                    <div className="relative group">
+                      <Avatar className="w-24 h-24 ring-4 ring-gray-600 group-hover:ring-purple-500 transition-all duration-300">
+                        {uploadedMedia ? (
+                          uploadedMedia.mimeType.startsWith('video/') ? (
+                            <video 
+                              src={uploadedMedia.dataUrl} 
+                              className="w-full h-full object-cover rounded-full" 
+                              muted 
+                              loop 
+                              playsInline 
+                              autoPlay
+                            />
+                          ) : (
+                            <AvatarImage src={uploadedMedia.dataUrl} alt="Preview" className="object-cover" />
+                          )
+                        ) : initialAvatarUrl && !avatarRemoved ? (
+                          initialAvatarUrl.startsWith('data:video/') ? (
+                            <video 
+                              src={initialAvatarUrl} 
+                              className="w-full h-full object-cover rounded-full" 
+                              muted 
+                              loop 
+                              playsInline 
+                              autoPlay
+                            />
+                          ) : (
+                            <AvatarImage src={initialAvatarUrl} alt="Current avatar" className="object-cover" />
+                          )
+                        ) : (
+                          <AvatarFallback className="bg-gradient-to-br from-purple-600 to-cyan-600 text-white text-2xl font-bold">
+                            {editingProfile?.name.charAt(0).toUpperCase() || <Camera className="w-8 h-8" />}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      
+                      {(uploadedMedia || (initialAvatarUrl && !avatarRemoved)) && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          onClick={removeMedia}
+                          className="absolute -top-2 -right-2 w-6 h-6 rounded-full p-0"
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-purple-500"
+                        data-testid="button-upload-image-edit"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploadedMedia ? 'Trocar Mídia' : 'Adicionar Foto/GIF/Vídeo'}
+                      </Button>
+                    </div>
+                    
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,video/mp4,video/webm,video/quicktime,.gif,.mp4,.webm,.mov"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </div>
+
+                  <FormField
+                    control={editForm.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-white font-medium">Nome do Perfil</FormLabel>
+                        <FormControl>
+                          <Input 
+                            {...field} 
+                            className="bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-purple-500 focus:ring-purple-500/20"
+                            placeholder="Digite o nome do perfil"
+                            data-testid="input-profile-name-edit"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={editForm.control}
+                    name="isKids"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="flex items-center space-x-3 p-4 rounded-lg bg-gray-700/30 border border-gray-600 hover:border-purple-500/50 transition-colors">
+                          <FormControl>
+                            <input 
+                              type="checkbox" 
+                              checked={field.value} 
+                              onChange={field.onChange}
+                              className="w-5 h-5 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500 focus:ring-2"
+                              data-testid="checkbox-kids-profile-edit"
+                            />
+                          </FormControl>
+                          <div className="flex-1">
+                            <FormLabel className="text-white font-medium">
+                              👶 Perfil Infantil
+                            </FormLabel>
+                            <p className="text-sm text-gray-400 mt-1">
+                              Conteúdo adequado para crianças
+                            </p>
+                          </div>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <div className="flex space-x-3 pt-4">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => {
+                        setShowEditDialog(false);
+                        setEditingProfile(null);
+                        setUploadedMedia(null);
+                        setInitialAvatarUrl(null);
+                        setAvatarRemoved(false);
+                        editForm.reset();
+                      }}
+                      className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                      data-testid="button-cancel-profile-edit"
+                    >
+                      Cancelar
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      className="flex-1 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-700 hover:to-cyan-700 text-white font-semibold"
+                      disabled={updateProfileMutation.isPending}
+                      data-testid="button-update-profile"
+                    >
+                      {updateProfileMutation.isPending ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                          Atualizando...
+                        </>
+                      ) : (
+                        'Atualizar Perfil'
                       )}
                     </Button>
                   </div>
