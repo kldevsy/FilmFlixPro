@@ -1,54 +1,62 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Edit, Trash2, Users } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Edit, Trash2, Users, Search, Filter, Grid, List } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAdmin } from "@/hooks/useAdmin";
 import { Link } from "wouter";
+import ContentForm from "@/components/ContentForm";
+import { type Content } from "@shared/schema";
 
-type Content = {
-  id: string;
-  title: string;
-  description: string;
-  year: number;
-  rating: number;
-  genre: string;
-  type: "movie" | "series" | "anime";
-  imageUrl: string;
-  trailerUrl?: string;
-  director?: string;
-  cast?: string[];
-  ageRating?: string;
-  releaseDate?: string;
-  country?: string;
-  language?: string;
-  subtitleOptions?: string[];
-  dubOptions?: string[];
-  totalEpisodes?: number;
-  totalSeasons?: number;
-  episodeDuration?: string;
-  categories?: string[];
-  isTrending?: boolean;
-  isNewRelease?: boolean;
-  isPopular?: boolean;
-  duration?: string;
-  createdAt: Date;
-};
 
 export default function Admin() {
   const { toast } = useToast();
   const { isAdmin } = useAdmin();
   const [selectedContent, setSelectedContent] = useState<Content | null>(null);
   const [showBootstrap, setShowBootstrap] = useState(!isAdmin);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   // Fetch all content
   const { data: contents = [], isLoading: contentsLoading } = useQuery<Content[]>({
     queryKey: ['/api/content'],
   });
+
+  // Get unique categories for filter
+  const allCategories = useMemo(() => {
+    const categories = new Set<string>();
+    contents.forEach(content => {
+      content.categories?.forEach(cat => categories.add(cat));
+    });
+    return Array.from(categories).sort();
+  }, [contents]);
+
+  // Filter content based on search and filters
+  const filteredContents = useMemo(() => {
+    return contents.filter(content => {
+      // Search by title
+      const matchesSearch = content.title.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Filter by type
+      const matchesType = typeFilter === "all" || content.type === typeFilter;
+      
+      // Filter by category
+      const matchesCategory = categoryFilter === "all" || 
+        (content.categories && content.categories.includes(categoryFilter));
+      
+      return matchesSearch && matchesType && matchesCategory;
+    });
+  }, [contents, searchTerm, typeFilter, categoryFilter]);
 
   // Bootstrap admin mutation
   const bootstrapMutation = useMutation({
@@ -117,6 +125,23 @@ export default function Admin() {
     }
   };
 
+  const handleAddContent = () => {
+    setSelectedContent(null);
+    setFormMode("create");
+    setFormOpen(true);
+  };
+
+  const handleEditContent = (content: Content) => {
+    setSelectedContent(content);
+    setFormMode("edit");
+    setFormOpen(true);
+  };
+
+  const handleCloseForm = () => {
+    setFormOpen(false);
+    setSelectedContent(null);
+  };
+
   const getTypeLabel = (type: string) => {
     switch (type) {
       case 'movie': return 'Filme';
@@ -149,7 +174,7 @@ export default function Admin() {
                 Voltar ao Site
               </Button>
             </Link>
-            <Button data-testid="button-add-content">
+            <Button onClick={handleAddContent} data-testid="button-add-content">
               <Plus className="w-4 h-4 mr-2" />
               Adicionar Conteúdo
             </Button>
@@ -189,17 +214,107 @@ export default function Admin() {
           </TabsList>
 
           <TabsContent value="content" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* Filters and Search */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader className="pb-4">
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4" />
+                    <span className="font-semibold">Filtros e Pesquisa</span>
+                    <Badge variant="secondary" className="ml-2" data-testid="badge-total-count">
+                      {filteredContents.length} de {contents.length}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={viewMode === "grid" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setViewMode("grid")}
+                      data-testid="button-grid-view"
+                    >
+                      <Grid className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant={viewMode === "list" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setViewMode("list")}
+                      data-testid="button-list-view"
+                    >
+                      <List className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      placeholder="Pesquisar por título..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                      data-testid="input-search"
+                    />
+                  </div>
+                  
+                  {/* Type Filter */}
+                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger data-testid="select-type-filter">
+                      <SelectValue placeholder="Filtrar por tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os tipos</SelectItem>
+                      <SelectItem value="movie">Filmes</SelectItem>
+                      <SelectItem value="series">Séries</SelectItem>
+                      <SelectItem value="anime">Animes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {/* Category Filter */}
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger data-testid="select-category-filter">
+                      <SelectValue placeholder="Filtrar por categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as categorias</SelectItem>
+                      {allCategories.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  {/* Clear Filters */}
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearchTerm("");
+                      setTypeFilter("all");
+                      setCategoryFilter("all");
+                    }}
+                    data-testid="button-clear-filters"
+                  >
+                    Limpar Filtros
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Content Grid/List */}
+            <div className={viewMode === "grid" ? "grid gap-4 md:grid-cols-2 lg:grid-cols-3" : "space-y-4"}>
               {contentsLoading ? (
                 <div className="col-span-full text-center py-8">
                   <div className="text-gray-400" data-testid="text-loading">Carregando conteúdo...</div>
                 </div>
-              ) : contents.length === 0 ? (
+              ) : filteredContents.length === 0 ? (
                 <div className="col-span-full text-center py-8">
                   <div className="text-gray-400" data-testid="text-no-content">Nenhum conteúdo encontrado</div>
                 </div>
               ) : (
-                contents.map((content) => (
+                filteredContents.map((content) => (
                   <Card key={content.id} className="bg-gray-800 border-gray-700 hover:border-gray-600 transition-colors" data-testid={`card-content-${content.id}`}>
                     <div className="aspect-[3/4] relative overflow-hidden rounded-t-lg">
                       <img
@@ -249,6 +364,7 @@ export default function Admin() {
                           size="sm"
                           variant="outline"
                           className="flex-1"
+                          onClick={() => handleEditContent(content)}
                           data-testid={`button-edit-${content.id}`}
                         >
                           <Edit className="w-4 h-4 mr-1" />
@@ -287,6 +403,14 @@ export default function Admin() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Content Form Modal */}
+        <ContentForm
+          open={formOpen}
+          onClose={handleCloseForm}
+          mode={formMode}
+          content={selectedContent ?? undefined}
+        />
       </div>
     </div>
   );
