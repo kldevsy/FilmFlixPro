@@ -40,6 +40,7 @@ export interface IStorage {
   
   // Watch history operations
   getWatchHistory(profileId: string): Promise<WatchHistory[]>;
+  getContinueWatching(profileId: string): Promise<any[]>;
   updateWatchProgress(data: InsertWatchHistory): Promise<WatchHistory>;
   markAsWatched(profileId: string, contentId: string): Promise<void>;
 }
@@ -688,6 +689,99 @@ export class DatabaseStorage implements IStorage {
         this.memoryWatchHistory.set(newHistory.id, newHistory);
         return newHistory;
       }
+    }
+  }
+
+  async getContinueWatching(profileId: string): Promise<any[]> {
+    if (!hasDb()) {
+      // Get watch history that is not completed and has some progress
+      const history = Array.from(this.memoryWatchHistory.values())
+        .filter(h => h.profileId === profileId && h.progress && h.progress < 100 && !h.completed)
+        .sort((a, b) => (b.watchedAt?.getTime() || 0) - (a.watchedAt?.getTime() || 0));
+      
+      // Get the content for each history item
+      const continueWatching = [];
+      for (const historyItem of history) {
+        const content = this.memoryContent.get(historyItem.contentId);
+        if (content) {
+          continueWatching.push({
+            ...content,
+            progress: historyItem.progress,
+            episodeNumber: historyItem.episodeNumber,
+            seasonNumber: historyItem.seasonNumber,
+            watchedAt: historyItem.watchedAt,
+          });
+        }
+      }
+      return continueWatching;
+    }
+    
+    try {
+      const db = getDb();
+      // Join watch history with content to get full details
+      const result = await db
+        .select({
+          id: content.id,
+          title: content.title,
+          description: content.description,
+          year: content.year,
+          rating: content.rating,
+          genre: content.genre,
+          type: content.type,
+          imageUrl: content.imageUrl,
+          trailerUrl: content.trailerUrl,
+          director: content.director,
+          cast: content.cast,
+          ageRating: content.ageRating,
+          releaseDate: content.releaseDate,
+          country: content.country,
+          language: content.language,
+          subtitleOptions: content.subtitleOptions,
+          dubOptions: content.dubOptions,
+          totalEpisodes: content.totalEpisodes,
+          totalSeasons: content.totalSeasons,
+          episodeDuration: content.episodeDuration,
+          categories: content.categories,
+          isTrending: content.isTrending,
+          isNewRelease: content.isNewRelease,
+          isPopular: content.isPopular,
+          duration: content.duration,
+          createdAt: content.createdAt,
+          progress: watchHistory.progress,
+          episodeNumber: watchHistory.episodeNumber,
+          seasonNumber: watchHistory.seasonNumber,
+          watchedAt: watchHistory.watchedAt,
+        })
+        .from(watchHistory)
+        .innerJoin(content, eq(watchHistory.contentId, content.id))
+        .where(and(
+          eq(watchHistory.profileId, profileId),
+          eq(watchHistory.completed, false)
+        ))
+        .orderBy(desc(watchHistory.watchedAt));
+      
+      return result.filter(item => item.progress && item.progress < 100);
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      // Fallback to memory implementation
+      const history = Array.from(this.memoryWatchHistory.values())
+        .filter(h => h.profileId === profileId && h.progress && h.progress < 100 && !h.completed)
+        .sort((a, b) => (b.watchedAt?.getTime() || 0) - (a.watchedAt?.getTime() || 0));
+      
+      const continueWatching = [];
+      for (const historyItem of history) {
+        const content = this.memoryContent.get(historyItem.contentId);
+        if (content) {
+          continueWatching.push({
+            ...content,
+            progress: historyItem.progress,
+            episodeNumber: historyItem.episodeNumber,
+            seasonNumber: historyItem.seasonNumber,
+            watchedAt: historyItem.watchedAt,
+          });
+        }
+      }
+      return continueWatching;
     }
   }
 

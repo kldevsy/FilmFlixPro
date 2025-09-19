@@ -104,6 +104,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get continue watching content for a profile
+  app.get('/api/profiles/:profileId/continue-watching', isAuthenticated, async (req: any, res) => {
+    try {
+      const { profileId } = req.params;
+      const userId = req.user.claims.sub;
+      
+      // Check if profile belongs to the user
+      const profile = await storage.getProfile(profileId);
+      if (!profile || profile.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const continueWatching = await storage.getContinueWatching(profileId);
+      res.json(continueWatching);
+    } catch (error) {
+      console.error("Error fetching continue watching:", error);
+      res.status(500).json({ message: "Failed to fetch continue watching" });
+    }
+  });
+
   app.post('/api/profiles/:profileId/watch-progress', isAuthenticated, async (req: any, res) => {
     try {
       const { profileId } = req.params;
