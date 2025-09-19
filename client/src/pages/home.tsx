@@ -9,7 +9,12 @@ import ContentModal from "@/components/content-modal";
 import Footer from "@/components/footer";
 import { useState, useMemo } from "react";
 import { useContent } from "@/hooks/use-content";
+import { useSubscription } from "@/hooks/useSubscription";
 import { useQuery } from "@tanstack/react-query";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Crown, AlertTriangle, Lock, Calendar, CreditCard } from "lucide-react";
 import type { Content } from "@shared/schema";
 
 export default function Home() {
@@ -27,6 +32,15 @@ export default function Home() {
   });
   
   const { data: allContent = [] } = useContent();
+  
+  const { 
+    subscription, 
+    plans, 
+    hasActiveSubscription, 
+    subscriptionExpired, 
+    subscriptionExpiringSoon,
+    isAuthenticated 
+  } = useSubscription();
   
   // Get current profile ID from localStorage
   const selectedProfileId = localStorage.getItem('selectedProfileId');
@@ -110,10 +124,194 @@ export default function Home() {
     return filtered;
   }, [allContent, filters]);
 
+  // Format subscription end date
+  const formatSubscriptionDate = (date: string | Date) => {
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(new Date(date));
+  };
+
+  // Calculate days until subscription expires
+  const getDaysUntilExpiry = (endDate: string | Date) => {
+    const now = new Date();
+    const expiry = new Date(endDate);
+    const diffTime = expiry.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
   return (
     <div className="min-h-screen overflow-x-hidden">
       <AuthHeader />
       <HeroCarousel />
+      
+      {/* Subscription Status Banner */}
+      {isAuthenticated && (
+        <>
+          {/* No Subscription */}
+          {!hasActiveSubscription && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="container mx-auto px-4 py-4"
+            >
+              <Card className="bg-gradient-to-r from-yellow-900/50 to-orange-900/50 border-yellow-500/50 backdrop-blur-sm" data-testid="banner-no-subscription">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                        <Crown className="w-8 h-8 text-yellow-400" />
+                        <Lock className="w-4 h-4 text-yellow-600 absolute -bottom-1 -right-1" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-yellow-400 mb-1">
+                          Assine para ter acesso completo
+                        </h3>
+                        <p className="text-yellow-100 text-sm">
+                          Desbloqueie todo o catálogo e assista sem limites
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Button 
+                        variant="outline" 
+                        className="border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black transition-colors"
+                        data-testid="button-view-plans"
+                      >
+                        <Crown className="w-4 h-4 mr-2" />
+                        Ver Planos
+                      </Button>
+                    </div>
+                  </div>
+                  {plans.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-yellow-500/30">
+                      <p className="text-yellow-200 text-xs mb-2">Planos disponíveis:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {plans.slice(0, 3).map((plan) => (
+                          <Badge key={plan.id} variant="outline" className="border-yellow-400/50 text-yellow-300 text-xs" data-testid={`badge-plan-${plan.id}`}>
+                            {plan.name} - R$ {(plan.price / 100).toFixed(2)}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Subscription Expired */}
+          {subscriptionExpired && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="container mx-auto px-4 py-4"
+            >
+              <Card className="bg-gradient-to-r from-red-900/50 to-pink-900/50 border-red-500/50 backdrop-blur-sm" data-testid="banner-subscription-expired">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <AlertTriangle className="w-8 h-8 text-red-400" />
+                      <div>
+                        <h3 className="text-lg font-bold text-red-400 mb-1">
+                          Sua assinatura expirou
+                        </h3>
+                        <p className="text-red-100 text-sm">
+                          Renove agora para continuar assistindo
+                        </p>
+                        {subscription && (
+                          <p className="text-red-200 text-xs mt-1">
+                            Expirou em: {formatSubscriptionDate(subscription.endDate)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Button 
+                        variant="destructive" 
+                        className="bg-red-600 hover:bg-red-700"
+                        data-testid="button-renew-subscription"
+                      >
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Renovar Agora
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Subscription Expiring Soon */}
+          {hasActiveSubscription && !subscriptionExpired && subscriptionExpiringSoon && subscription && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="container mx-auto px-4 py-4"
+            >
+              <Card className="bg-gradient-to-r from-orange-900/50 to-yellow-900/50 border-orange-500/50 backdrop-blur-sm" data-testid="banner-subscription-expiring">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <Calendar className="w-8 h-8 text-orange-400" />
+                      <div>
+                        <h3 className="text-lg font-bold text-orange-400 mb-1">
+                          Sua assinatura expira em breve
+                        </h3>
+                        <p className="text-orange-100 text-sm">
+                          {getDaysUntilExpiry(subscription.endDate)} dias restantes
+                        </p>
+                        <p className="text-orange-200 text-xs mt-1">
+                          Expira em: {formatSubscriptionDate(subscription.endDate)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Button 
+                        variant="outline" 
+                        className="border-orange-400 text-orange-400 hover:bg-orange-400 hover:text-black transition-colors"
+                        data-testid="button-extend-subscription"
+                      >
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Renovar
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Active Subscription */}
+          {hasActiveSubscription && !subscriptionExpired && !subscriptionExpiringSoon && subscription && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="container mx-auto px-4 py-2"
+            >
+              <Card className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 border-green-500/30 backdrop-blur-sm" data-testid="banner-subscription-active">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <Crown className="w-6 h-6 text-green-400" />
+                      <div>
+                        <p className="text-green-400 text-sm font-medium">
+                          Assinatura Ativa até {formatSubscriptionDate(subscription.endDate)}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="border-green-400/50 text-green-400 text-xs" data-testid="badge-subscription-active">
+                      Premium
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+        </>
+      )}
       <AdvancedFilters 
         selectedCategory={selectedCategory} 
         onCategoryChange={setSelectedCategory}
