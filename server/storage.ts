@@ -450,8 +450,11 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.warn("Database error, falling back to memory storage:", error);
       const user: User = {
-        ...userData,
         id: userData.id || randomUUID(),
+        email: userData.email ?? null,
+        firstName: userData.firstName ?? null,
+        lastName: userData.lastName ?? null,
+        profileImageUrl: userData.profileImageUrl ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -477,8 +480,12 @@ export class DatabaseStorage implements IStorage {
   async createProfile(profile: InsertProfile): Promise<Profile> {
     if (!hasDb()) {
       const newProfile: Profile = {
-        ...profile,
         id: randomUUID(),
+        name: profile.name,
+        userId: profile.userId,
+        language: profile.language ?? null,
+        avatarUrl: profile.avatarUrl ?? null,
+        isKids: profile.isKids ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -492,8 +499,12 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.warn("Database error, falling back to memory storage:", error);
       const newProfile: Profile = {
-        ...profile,
         id: randomUUID(),
+        name: profile.name,
+        userId: profile.userId,
+        language: profile.language ?? null,
+        avatarUrl: profile.avatarUrl ?? null,
+        isKids: profile.isKids ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -609,8 +620,13 @@ export class DatabaseStorage implements IStorage {
         return updated;
       } else {
         const newHistory: WatchHistory = {
-          ...data,
           id: randomUUID(),
+          profileId: data.profileId,
+          contentId: data.contentId,
+          progress: data.progress ?? null,
+          episodeNumber: data.episodeNumber ?? null,
+          seasonNumber: data.seasonNumber ?? null,
+          completed: data.completed ?? null,
           watchedAt: new Date(),
         };
         this.memoryWatchHistory.set(newHistory.id, newHistory);
@@ -660,8 +676,13 @@ export class DatabaseStorage implements IStorage {
         return updated;
       } else {
         const newHistory: WatchHistory = {
-          ...data,
           id: randomUUID(),
+          profileId: data.profileId,
+          contentId: data.contentId,
+          progress: data.progress ?? null,
+          episodeNumber: data.episodeNumber ?? null,
+          seasonNumber: data.seasonNumber ?? null,
+          completed: data.completed ?? null,
           watchedAt: new Date(),
         };
         this.memoryWatchHistory.set(newHistory.id, newHistory);
