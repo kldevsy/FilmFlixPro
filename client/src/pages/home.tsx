@@ -4,11 +4,13 @@ import AuthHeader from "@/components/auth-header";
 import HeroCarousel from "@/components/hero-carousel";
 import AdvancedFilters, { type FilterState } from "@/components/advanced-filters";
 import ContentCarousel from "@/components/content-carousel";
+import ContinueWatchingCarousel from "@/components/continue-watching-carousel";
 import ContentGrid from "@/components/content-grid";
 import ContentModal from "@/components/content-modal";
 import Footer from "@/components/footer";
 import { useState, useMemo } from "react";
 import { useContent } from "@/hooks/use-content";
+import { useQuery } from "@tanstack/react-query";
 import type { Content } from "@shared/schema";
 
 export default function Home() {
@@ -26,6 +28,15 @@ export default function Home() {
   });
   
   const { data: allContent = [] } = useContent();
+  
+  // Get current profile ID from localStorage
+  const selectedProfileId = localStorage.getItem('selectedProfileId');
+  
+  // Fetch continue watching data
+  const { data: continueWatchingData = [] } = useQuery({
+    queryKey: ['/api/profiles', selectedProfileId, 'continue-watching'],
+    enabled: !!selectedProfileId,
+  });
   
   // Filter and sort content based on active filters
   const filteredContent = useMemo(() => {
@@ -194,6 +205,24 @@ export default function Home() {
                 <p className="text-muted-foreground">Tente ajustar seus filtros para encontrar mais conteúdo</p>
               </motion.div>
             )}
+          </div>
+        </motion.section>
+      )}
+      
+      {/* Continue Watching Section */}
+      {continueWatchingData.length > 0 && (
+        <motion.section 
+          className="py-16"
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          transition={{ duration: 0.6 }}
+          viewport={{ once: true }}
+        >
+          <div className="container mx-auto px-6">
+            <ContinueWatchingCarousel 
+              items={continueWatchingData} 
+              onItemClick={setSelectedContent}
+            />
           </div>
         </motion.section>
       )}
