@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -52,9 +52,13 @@ export default function AuthHeader() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center space-x-2 text-white hover:bg-gray-800">
                 <Avatar className="w-8 h-8">
-                  <AvatarFallback className="bg-purple-600 text-white text-sm">
-                    {currentProfile.name.charAt(0).toUpperCase()}
-                  </AvatarFallback>
+                  {currentProfile.avatarUrl ? (
+                    <AvatarImage src={currentProfile.avatarUrl} alt={currentProfile.name} className="object-cover" />
+                  ) : (
+                    <AvatarFallback className="bg-purple-600 text-white text-sm">
+                      {currentProfile.name.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  )}
                 </Avatar>
                 <span className="text-sm" data-testid={`text-current-profile-${currentProfile.id}`}>
                   {currentProfile.name}
@@ -78,9 +82,13 @@ export default function AuthHeader() {
                 >
                   <div className="flex items-center space-x-2">
                     <Avatar className="w-6 h-6">
-                      <AvatarFallback className="bg-purple-600 text-white text-xs">
-                        {profile.name.charAt(0).toUpperCase()}
-                      </AvatarFallback>
+                      {profile.avatarUrl ? (
+                        <AvatarImage src={profile.avatarUrl} alt={profile.name} className="object-cover" />
+                      ) : (
+                        <AvatarFallback className="bg-purple-600 text-white text-xs">
+                          {profile.name.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      )}
                     </Avatar>
                     <span>{profile.name}</span>
                     {profile.isKids && (
