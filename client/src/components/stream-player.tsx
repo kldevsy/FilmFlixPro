@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Play, Pause, Volume2, VolumeX, Maximize, RotateCcw, RotateCw,
@@ -56,7 +56,7 @@ export default function StreamPlayer({
   const [introEnd, setIntroEnd] = useState(90); // 90 segundos de abertura
   const [isBuffering, setIsBuffering] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [quality, setQuality] = useState("auto");
+  const [quality, setQuality] = useState<'auto' | '360p' | '480p' | '720p' | '1080p' | '1440p' | '2160p'>('720p');
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
@@ -64,6 +64,18 @@ export default function StreamPlayer({
   const [lastTapX, setLastTapX] = useState(0);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedTimeRef = useRef<number>(0);
+
+  // Mapeamento das qualidades de vídeo
+  const qualitySources = {
+    'auto': videoUrl,
+    '360p': `${videoUrl}?quality=360`,
+    '480p': `${videoUrl}?quality=480`, 
+    '720p': `${videoUrl}?quality=720`,
+    '1080p': `${videoUrl}?quality=1080`,
+    '1440p': `${videoUrl}?quality=1440`,
+    '2160p': `${videoUrl}?quality=2160`
+  };
 
   // Detecção de mobile
   useEffect(() => {
@@ -105,16 +117,18 @@ export default function StreamPlayer({
       if (animationId) cancelAnimationFrame(animationId);
       animationId = requestAnimationFrame(() => {
         setCurrentTime(video.currentTime);
-        // Save watch progress for continue watching
-        if (video.currentTime > 30) { // Only save after 30 seconds
+        // Save watch progress for continue watching (throttled to avoid excessive writes)
+        const now = Date.now();
+        if (video.currentTime > 30 && now - lastSavedTimeRef.current > 5000) { // Save every 5 seconds
           const profileId = localStorage.getItem('selectedProfileId');
           if (profileId) {
             const watchKey = `watch_${profileId}_${content.id}`;
             localStorage.setItem(watchKey, JSON.stringify({
               currentTime: video.currentTime,
               duration: video.duration,
-              lastWatched: Date.now()
+              lastWatched: now
             }));
+            lastSavedTimeRef.current = now;
           }
         }
       });
@@ -178,15 +192,15 @@ export default function StreamPlayer({
     };
   }, []);
 
-  const skipForward = () => {
+  const skipForward = useCallback(() => {
     if (!videoRef.current) return;
     videoRef.current.currentTime = Math.min(duration, currentTime + 10);
-  };
+  }, [duration, currentTime]);
 
-  const skipBackward = () => {
+  const skipBackward = useCallback(() => {
     if (!videoRef.current) return;
     videoRef.current.currentTime = Math.max(0, currentTime - 10);
-  };
+  }, [currentTime]);
 
   // Mouse movement e touch handler with double tap support
   useEffect(() => {
@@ -215,7 +229,7 @@ export default function StreamPlayer({
       }
       
       // Single tap - toggle controls
-      setShowControls(!showControls);
+      setShowControls(prev => !prev);
       
       // Store tap info for double tap detection
       setLastTapTime(currentTime);
@@ -229,14 +243,12 @@ export default function StreamPlayer({
       // Eventos de touch para mobile
       if (isMobile) {
         playerRef.current.addEventListener('touchstart', handleTouch, { passive: true });
-        playerRef.current.addEventListener('touchend', handleTouch, { passive: true });
       }
       
       return () => {
         if (playerRef.current) {
           playerRef.current.removeEventListener('mousemove', handleMouseMove);
           playerRef.current.removeEventListener('touchstart', handleTouch);
-          playerRef.current.removeEventListener('touchend', handleTouch);
         }
       };
     }
@@ -841,25 +853,29 @@ export default function StreamPlayer({
                   className="w-full bg-muted text-foreground px-3 py-2 rounded-lg border border-border text-sm"
                   value={quality}
                   onChange={(e) => {
-                    const newQuality = e.target.value;
+                    const newQuality = e.target.value as typeof quality;
                     setQuality(newQuality);
-                    // In a real implementation, this would change the video source
-                    if (videoRef.current && newQuality !== 'auto') {
+                    
+                    if (videoRef.current) {
                       const currentTime = videoRef.current.currentTime;
                       const wasPlaying = isPlaying;
                       
-                      // Mock quality change by updating video source with quality parameter
-                      const url = new URL(videoUrl);
-                      url.searchParams.set('quality', newQuality);
+                      // Use the quality source mapping
+                      videoRef.current.src = qualitySources[newQuality];
                       
-                      videoRef.current.src = url.toString();
-                      videoRef.current.currentTime = currentTime;
+                      // Preserve current time and playing state
+                      const handleLoadedData = () => {
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = currentTime;
+                          if (wasPlaying) {
+                            videoRef.current.play();
+                          }
+                          videoRef.current.removeEventListener('loadeddata', handleLoadedData);
+                        }
+                      };
                       
-                      if (wasPlaying) {
-                        videoRef.current.play();
-                      }
+                      videoRef.current.addEventListener('loadeddata', handleLoadedData);
                     }
-                    console.log('Qualidade alterada para:', newQuality);
                   }}
                   data-testid="quality-selector"
                 >
@@ -869,6 +885,7 @@ export default function StreamPlayer({
                   <option value="1080p">1080p HD</option>
                   <option value="720p">720p</option>
                   <option value="480p">480p</option>
+                  <option value="360p">360p</option>
                 </select>
               </div>
             </div>
