@@ -49,13 +49,20 @@ export default function ProfileSelect() {
 
   const createProfileMutation = useMutation({
     mutationFn: async (data: { name: string; isKids: boolean }) => {
+      console.log('Creating profile with data:', data);
       const response = await apiRequest('POST', '/api/profiles', data);
-      return await response.json();
+      const result = await response.json();
+      console.log('Profile created:', result);
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('Profile creation successful:', data);
       queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       setShowCreateDialog(false);
       form.reset();
+    },
+    onError: (error) => {
+      console.error('Profile creation failed:', error);
     },
   });
 
@@ -125,7 +132,11 @@ export default function ProfileSelect() {
                 <DialogTitle className="text-white">Criar Novo Perfil</DialogTitle>
               </DialogHeader>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit((data) => createProfileMutation.mutate(data))} className="space-y-4">
+                <form onSubmit={form.handleSubmit((data) => {
+                  console.log('Form submitted with data:', data);
+                  console.log('Form errors:', form.formState.errors);
+                  createProfileMutation.mutate(data);
+                })} className="space-y-4">
                   <FormField
                     control={form.control}
                     name="name"
