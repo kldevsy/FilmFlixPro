@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, Edit, Trash2, Users, Search, Filter, Grid, List, Crown } from "lucide-react";
+import { Plus, Edit, Trash2, Users, Search, Filter, Grid, List, Crown, Bell, Send, AlertTriangle, Info, CheckCircle, XCircle, Eye, Calendar, Play } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAdmin } from "@/hooks/useAdmin";
@@ -18,7 +18,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Link } from "wouter";
 import ContentForm from "@/components/ContentForm";
-import { type Content, type User } from "@shared/schema";
+import { type Content, type User, type Notification, insertNotificationSchema } from "@shared/schema";
 
 // User edit schema for form validation
 const userEditSchema = z.object({
@@ -26,6 +26,38 @@ const userEditSchema = z.object({
   lastName: z.string().optional(),
   email: z.string().email("Email inválido").optional(),
 });
+
+// Alert/notification form schema
+const alertSchema = insertNotificationSchema.omit({ userId: true }).extend({
+  targetUsers: z.array(z.string()).optional(), // User IDs to send to (if empty, broadcasts to all)
+});
+
+type AlertFormData = z.infer<typeof alertSchema>;
+
+// Alert templates
+const alertTemplates = {
+  custom: { title: '', message: '', type: 'info' },
+  maintenance: { 
+    title: 'Manutenção Programada', 
+    message: 'O sistema ficará indisponível entre {startTime} e {endTime} para manutenção. Pedimos desculpas pela inconveniência.',
+    type: 'warning'
+  },
+  new_content: {
+    title: 'Novo Conteúdo Disponível',
+    message: 'Confira os novos filmes, séries e animes que acabaram de chegar na plataforma!',
+    type: 'info'
+  },
+  system_update: {
+    title: 'Atualização do Sistema',
+    message: 'O sistema foi atualizado com novas funcionalidades e melhorias. Explore as novidades!',
+    type: 'info'
+  },
+  urgent: {
+    title: 'Aviso Importante',
+    message: 'Esta é uma mensagem importante que requer sua atenção imediata.',
+    type: 'urgent'
+  }
+};
 
 
 export default function Admin() {
@@ -45,6 +77,12 @@ export default function Admin() {
   const [userRoleFilter, setUserRoleFilter] = useState<string>("all");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserEditDialog, setShowUserEditDialog] = useState(false);
+  
+  // Alerts management states
+  const [showCreateAlertDialog, setShowCreateAlertDialog] = useState(false);
+  const [alertSearchTerm, setAlertSearchTerm] = useState("");
+  const [alertTypeFilter, setAlertTypeFilter] = useState<string>("all");
+  const [selectedAlertTemplate, setSelectedAlertTemplate] = useState<string>("custom");
 
   // User edit form
   const userEditForm = useForm({
@@ -53,6 +91,19 @@ export default function Admin() {
       firstName: "",
       lastName: "",
       email: "",
+    },
+  });
+  
+  // Alert creation form
+  const alertForm = useForm<AlertFormData>({
+    resolver: zodResolver(alertSchema),
+    defaultValues: {
+      title: "",
+      message: "",
+      type: "info",
+      actionUrl: "",
+      metadata: null,
+      targetUsers: [],
     },
   });
 
@@ -66,6 +117,7 @@ export default function Admin() {
     queryKey: ['/api/admin/users'],
     enabled: isAdmin,
   });
+  
 
   // Sync bootstrap visibility with admin status
   useEffect(() => {
@@ -115,6 +167,17 @@ export default function Admin() {
       return matchesSearch && matchesRole;
     });
   }, [users, userSearchTerm, userRoleFilter]);
+  
+  // Handle alert template selection
+  const handleAlertTemplateChange = (template: string) => {
+    setSelectedAlertTemplate(template);
+    const templateData = alertTemplates[template as keyof typeof alertTemplates];
+    if (templateData) {
+      alertForm.setValue('title', templateData.title);
+      alertForm.setValue('message', templateData.message);
+      alertForm.setValue('type', templateData.type);
+    }
+  };
 
   // Bootstrap admin mutation
   const bootstrapMutation = useMutation({
@@ -218,6 +281,35 @@ export default function Admin() {
       toast({
         title: "Erro",
         description: "Erro ao atualizar usuário.",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Send notification/alert mutation
+  const sendNotificationMutation = useMutation({
+    mutationFn: async (data: AlertFormData) => {
+      const { targetUsers, ...notificationData } = data;
+      const payload = {
+        ...notificationData,
+        userIds: targetUsers && targetUsers.length > 0 ? targetUsers : undefined,
+      };
+      const response = await apiRequest('POST', '/api/admin/notifications/send', payload);
+      return response.json();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/notifications'] });
+      setShowCreateAlertDialog(false);
+      alertForm.reset();
+      toast({
+        title: "Sucesso!",
+        description: `Alerta enviado para ${result.sent} usuário(s) com sucesso.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro",
+        description: "Erro ao enviar alerta.",
         variant: "destructive",
       });
     },
@@ -345,13 +437,17 @@ export default function Admin() {
         )}
 
         <Tabs defaultValue="content" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-gray-800">
+          <TabsList className="grid w-full grid-cols-3 bg-gray-800">
             <TabsTrigger value="content" data-testid="tab-content">
               Conteúdo ({contents.length})
             </TabsTrigger>
             <TabsTrigger value="users" data-testid="tab-users">
               <Users className="w-4 h-4 mr-2" />
               Usuários ({users.length})
+            </TabsTrigger>
+            <TabsTrigger value="alerts" data-testid="tab-alerts">
+              <Bell className="w-4 h-4 mr-2" />
+              Alertas
             </TabsTrigger>
           </TabsList>
 
@@ -678,6 +774,187 @@ export default function Admin() {
               )}
             </div>
           </TabsContent>
+          
+          <TabsContent value="alerts" className="space-y-4">
+            {/* Alerts Management Header */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader className="pb-4">
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4" />
+                    <span className="font-semibold">Gerenciamento de Alertas</span>
+                  </div>
+                  <Button 
+                    onClick={() => setShowCreateAlertDialog(true)}
+                    className="bg-blue-600 hover:bg-blue-700"
+                    data-testid="button-create-alert"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Criar Alerta
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Alert Statistics */}
+                  <Card className="bg-gray-700 border-gray-600">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-green-500/20 rounded-lg">
+                          <CheckCircle className="w-5 h-5 text-green-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-400">Total de Usuários</p>
+                          <p className="text-xl font-bold text-white" data-testid="text-total-users">{users.length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card className="bg-gray-700 border-gray-600">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-500/20 rounded-lg">
+                          <Send className="w-5 h-5 text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-400">Conteúdo Disponível</p>
+                          <p className="text-xl font-bold text-white" data-testid="text-total-content">{contents.length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card className="bg-gray-700 border-gray-600">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-orange-500/20 rounded-lg">
+                          <AlertTriangle className="w-5 h-5 text-orange-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-400">Administradores</p>
+                          <p className="text-xl font-bold text-white" data-testid="text-total-admins">{users.filter(u => u.isAdmin).length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                {/* Alert Templates Quick Actions */}
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-3">Modelos de Alerta Rápido</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <Button
+                      variant="outline"
+                      className="p-4 h-auto flex-col gap-2 bg-orange-600/10 border-orange-600 hover:bg-orange-600/20"
+                      onClick={() => {
+                        handleAlertTemplateChange('maintenance');
+                        setShowCreateAlertDialog(true);
+                      }}
+                      data-testid="button-maintenance-alert"
+                    >
+                      <AlertTriangle className="w-5 h-5 text-orange-400" />
+                      <span className="text-sm">Manutenção</span>
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      className="p-4 h-auto flex-col gap-2 bg-green-600/10 border-green-600 hover:bg-green-600/20"
+                      onClick={() => {
+                        handleAlertTemplateChange('new_content');
+                        setShowCreateAlertDialog(true);
+                      }}
+                      data-testid="button-new-content-alert"
+                    >
+                      <Plus className="w-5 h-5 text-green-400" />
+                      <span className="text-sm">Novo Conteúdo</span>
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      className="p-4 h-auto flex-col gap-2 bg-blue-600/10 border-blue-600 hover:bg-blue-600/20"
+                      onClick={() => {
+                        handleAlertTemplateChange('system_update');
+                        setShowCreateAlertDialog(true);
+                      }}
+                      data-testid="button-system-update-alert"
+                    >
+                      <Info className="w-5 h-5 text-blue-400" />
+                      <span className="text-sm">Atualização</span>
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      className="p-4 h-auto flex-col gap-2 bg-red-600/10 border-red-600 hover:bg-red-600/20"
+                      onClick={() => {
+                        handleAlertTemplateChange('urgent');
+                        setShowCreateAlertDialog(true);
+                      }}
+                      data-testid="button-urgent-alert"
+                    >
+                      <XCircle className="w-5 h-5 text-red-400" />
+                      <span className="text-sm">Urgente</span>
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Recent Activity */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  Atividade Recente
+                </CardTitle>
+                <CardDescription>
+                  Resumo das atividades administrativas recentes
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-3 bg-gray-700 rounded-lg">
+                    <div className="p-2 bg-green-500/20 rounded-lg">
+                      <CheckCircle className="w-4 h-4 text-green-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-white">Sistema Online</p>
+                      <p className="text-xs text-gray-400">Todas as funcionalidades operando normalmente</p>
+                    </div>
+                    <Badge variant="secondary" className="bg-green-500/20 text-green-400">
+                      Ativo
+                    </Badge>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 p-3 bg-gray-700 rounded-lg">
+                    <div className="p-2 bg-blue-500/20 rounded-lg">
+                      <Users className="w-4 h-4 text-blue-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-white">Usuários Cadastrados</p>
+                      <p className="text-xs text-gray-400">{users.length} usuários na plataforma</p>
+                    </div>
+                    <Badge variant="secondary" className="bg-blue-500/20 text-blue-400">
+                      Ativo
+                    </Badge>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 p-3 bg-gray-700 rounded-lg">
+                    <div className="p-2 bg-purple-500/20 rounded-lg">
+                      <Play className="w-4 h-4 text-purple-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-white">Conteúdo Disponível</p>
+                      <p className="text-xs text-gray-400">{contents.length} títulos no catálogo</p>
+                    </div>
+                    <Badge variant="secondary" className="bg-purple-500/20 text-purple-400">
+                      Ativo
+                    </Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
 
         {/* Content Form Modal */}
@@ -774,6 +1051,221 @@ export default function Admin() {
                     data-testid="button-save-edit-user"
                   >
                     {updateUserMutation.isPending ? "Salvando..." : "Salvar Alterações"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Create Alert Dialog */}
+        <Dialog open={showCreateAlertDialog} onOpenChange={setShowCreateAlertDialog}>
+          <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Send className="w-5 h-5" />
+                Criar Novo Alerta
+              </DialogTitle>
+              <DialogDescription className="text-gray-400">
+                Envie uma notificação para todos os usuários ou usuários específicos
+              </DialogDescription>
+            </DialogHeader>
+            
+            <Form {...alertForm}>
+              <form onSubmit={alertForm.handleSubmit((data) => sendNotificationMutation.mutate(data))} className="space-y-6">
+                {/* Template Selection */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Modelo de Alerta</label>
+                  <Select value={selectedAlertTemplate} onValueChange={handleAlertTemplateChange}>
+                    <SelectTrigger className="bg-gray-800 border-gray-600" data-testid="select-alert-template">
+                      <SelectValue placeholder="Escolha um modelo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="custom">Personalizado</SelectItem>
+                      <SelectItem value="maintenance">Manutenção Programada</SelectItem>
+                      <SelectItem value="new_content">Novo Conteúdo</SelectItem>
+                      <SelectItem value="system_update">Atualização do Sistema</SelectItem>
+                      <SelectItem value="urgent">Aviso Urgente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Alert Type */}
+                  <FormField
+                    control={alertForm.control}
+                    name="type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo de Alerta</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger className="bg-gray-800 border-gray-600" data-testid="select-alert-type">
+                              <SelectValue placeholder="Selecione o tipo" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="info">
+                              <div className="flex items-center gap-2">
+                                <Info className="w-4 h-4 text-blue-400" />
+                                Informação
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="warning">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4 text-orange-400" />
+                                Aviso
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="urgent">
+                              <div className="flex items-center gap-2">
+                                <XCircle className="w-4 h-4 text-red-400" />
+                                Urgente
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  {/* Action URL */}
+                  <FormField
+                    control={alertForm.control}
+                    name="actionUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>URL de Ação (Opcional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            value={field.value || ''}
+                            placeholder="https://exemplo.com"
+                            className="bg-gray-800 border-gray-600"
+                            data-testid="input-alert-action-url"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                
+                {/* Title */}
+                <FormField
+                  control={alertForm.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Título do Alerta</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="Título da notificação"
+                          className="bg-gray-800 border-gray-600"
+                          data-testid="input-alert-title"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {/* Message */}
+                <FormField
+                  control={alertForm.control}
+                  name="message"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Mensagem do Alerta</FormLabel>
+                      <FormControl>
+                        <textarea
+                          {...field}
+                          rows={4}
+                          placeholder="Conteúdo da mensagem..."
+                          className="w-full p-3 bg-gray-800 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          data-testid="textarea-alert-message"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {/* Target Users */}
+                <FormField
+                  control={alertForm.control}
+                  name="targetUsers"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Destinatários</FormLabel>
+                      <FormControl>
+                        <div className="space-y-2">
+                          <div className="p-3 bg-gray-800 border border-gray-600 rounded-md">
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="radio"
+                                id="all-users"
+                                name="recipient-type"
+                                checked={!field.value || field.value.length === 0}
+                                onChange={() => field.onChange([])}
+                                className="text-blue-500"
+                              />
+                              <label htmlFor="all-users" className="text-sm">Todos os usuários ({users.length})</label>
+                            </div>
+                          </div>
+                          <div className="p-3 bg-gray-800 border border-gray-600 rounded-md">
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="radio"
+                                id="admin-users"
+                                name="recipient-type"
+                                checked={field.value && field.value.length === users.filter(u => u.isAdmin).length}
+                                onChange={() => field.onChange(users.filter(u => u.isAdmin).map(u => u.id))}
+                                className="text-blue-500"
+                              />
+                              <label htmlFor="admin-users" className="text-sm">Apenas administradores ({users.filter(u => u.isAdmin).length})</label>
+                            </div>
+                          </div>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <div className="flex justify-end gap-3 pt-6 border-t border-gray-700">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowCreateAlertDialog(false);
+                      alertForm.reset();
+                      setSelectedAlertTemplate('custom');
+                    }}
+                    disabled={sendNotificationMutation.isPending}
+                    data-testid="button-cancel-alert"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={sendNotificationMutation.isPending}
+                    className="bg-blue-600 hover:bg-blue-700"
+                    data-testid="button-send-alert"
+                  >
+                    {sendNotificationMutation.isPending ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Enviando...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Enviar Alerta
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>
