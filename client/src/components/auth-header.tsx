@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
+import { useAdmin } from "@/hooks/useAdmin";
 import { useQuery } from "@tanstack/react-query";
-import { LogOut, User, Users, Settings, ChevronDown, Sparkles } from "lucide-react";
+import { LogOut, User, Users, Settings, ChevronDown, Sparkles, Shield } from "lucide-react";
 
 type Profile = {
   id: string;
@@ -19,6 +20,7 @@ type Profile = {
 
 export default function AuthHeader() {
   const { user } = useAuth();
+  const { isAdmin } = useAdmin();
   const [, navigate] = useLocation();
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
     localStorage.getItem('selectedProfileId')
@@ -226,6 +228,27 @@ export default function AuthHeader() {
                     <span className="font-medium">Gerenciar Perfis</span>
                   </DropdownMenuItem>
                 </motion.div>
+
+                {isAdmin && (
+                  <motion.div
+                    whileHover={{ scale: 1.02 }}
+                    transition={{ type: "spring", stiffness: 300 }}
+                  >
+                    <DropdownMenuItem
+                      onClick={() => navigate('/admin')}
+                      className="cursor-pointer text-gray-300 hover:bg-gradient-to-r hover:from-orange-600/20 hover:to-red-600/20 hover:text-white mx-3 my-1 rounded-xl transition-all duration-300 p-3 group"
+                      data-testid="menu-item-admin"
+                    >
+                      <motion.div
+                        whileHover={{ rotate: 15 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Shield className="w-5 h-5 mr-3 text-orange-400 group-hover:text-orange-300" />
+                      </motion.div>
+                      <span className="font-medium">Administração</span>
+                    </DropdownMenuItem>
+                  </motion.div>
+                )}
 
                 <motion.div
                   whileHover={{ scale: 1.02 }}

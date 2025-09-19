@@ -27,9 +27,17 @@ export interface IStorage {
   createContent(content: InsertContent): Promise<Content>;
   searchContent(query: string): Promise<Content[]>;
   
+  // Admin content operations
+  updateContent(id: string, content: Partial<InsertContent>): Promise<Content>;
+  deleteContent(id: string): Promise<void>;
+  
   // User operations - required for Replit Auth
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  
+  // Admin user operations
+  makeUserAdmin(id: string): Promise<User>;
+  hasAnyAdmin(): Promise<boolean>;
   
   // Profile operations
   getProfilesByUser(userId: string): Promise<Profile[]>;
@@ -395,6 +403,59 @@ export class DatabaseStorage implements IStorage {
     return contentData;
   }
 
+  async updateContent(id: string, updates: Partial<InsertContent>): Promise<Content> {
+    if (!hasDb()) {
+      const existing = this.memoryContent.get(id);
+      if (!existing) {
+        throw new Error(`Content with id ${id} not found`);
+      }
+      const updatedContent: Content = {
+        ...existing,
+        ...updates,
+      };
+      this.memoryContent.set(id, updatedContent);
+      return updatedContent;
+    }
+    try {
+      const db = getDb();
+      const [updatedContent] = await db
+        .update(content)
+        .set(updates)
+        .where(eq(content.id, id))
+        .returning();
+      if (!updatedContent) {
+        throw new Error(`Content with id ${id} not found`);
+      }
+      return updatedContent;
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      const existing = this.memoryContent.get(id);
+      if (!existing) {
+        throw new Error(`Content with id ${id} not found`);
+      }
+      const updatedContent: Content = {
+        ...existing,
+        ...updates,
+      };
+      this.memoryContent.set(id, updatedContent);
+      return updatedContent;
+    }
+  }
+
+  async deleteContent(id: string): Promise<void> {
+    if (!hasDb()) {
+      this.memoryContent.delete(id);
+      return;
+    }
+    try {
+      const db = getDb();
+      await db.delete(content).where(eq(content.id, id));
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      this.memoryContent.delete(id);
+    }
+  }
+
   async searchContent(query: string): Promise<Content[]> {
     const lowerQuery = query.toLowerCase();
     return Array.from(this.memoryContent.values()).filter(
@@ -422,13 +483,15 @@ export class DatabaseStorage implements IStorage {
 
   async upsertUser(userData: UpsertUser): Promise<User> {
     if (!hasDb()) {
+      const existingUser = this.memoryUsers.get(userData.id!);
       const user: User = {
         id: userData.id || randomUUID(),
         email: userData.email ?? null,
         firstName: userData.firstName ?? null,
         lastName: userData.lastName ?? null,
         profileImageUrl: userData.profileImageUrl ?? null,
-        createdAt: new Date(),
+        isAdmin: userData.isAdmin ?? existingUser?.isAdmin ?? false,
+        createdAt: existingUser?.createdAt ?? new Date(),
         updatedAt: new Date(),
       };
       this.memoryUsers.set(user.id, user);
@@ -436,31 +499,93 @@ export class DatabaseStorage implements IStorage {
     }
     try {
       const db = getDb();
+      // Build update object excluding undefined values
+      const updateData: any = { updatedAt: new Date() };
+      if (userData.email !== undefined) updateData.email = userData.email;
+      if (userData.firstName !== undefined) updateData.firstName = userData.firstName;
+      if (userData.lastName !== undefined) updateData.lastName = userData.lastName;
+      if (userData.profileImageUrl !== undefined) updateData.profileImageUrl = userData.profileImageUrl;
+      if (userData.isAdmin !== undefined) updateData.isAdmin = userData.isAdmin;
+
       const [user] = await db
         .insert(users)
         .values(userData)
         .onConflictDoUpdate({
           target: users.id,
-          set: {
-            ...userData,
-            updatedAt: new Date(),
-          },
+          set: updateData,
         })
         .returning();
       return user;
     } catch (error) {
       console.warn("Database error, falling back to memory storage:", error);
+      const existingUser = this.memoryUsers.get(userData.id!);
       const user: User = {
         id: userData.id || randomUUID(),
         email: userData.email ?? null,
         firstName: userData.firstName ?? null,
         lastName: userData.lastName ?? null,
         profileImageUrl: userData.profileImageUrl ?? null,
-        createdAt: new Date(),
+        isAdmin: userData.isAdmin ?? existingUser?.isAdmin ?? false,
+        createdAt: existingUser?.createdAt ?? new Date(),
         updatedAt: new Date(),
       };
       this.memoryUsers.set(user.id, user);
       return user;
+    }
+  }
+
+  async makeUserAdmin(id: string): Promise<User> {
+    if (!hasDb()) {
+      const user = this.memoryUsers.get(id);
+      if (!user) {
+        throw new Error(`User with id ${id} not found`);
+      }
+      const updatedUser: User = {
+        ...user,
+        isAdmin: true,
+        updatedAt: new Date(),
+      };
+      this.memoryUsers.set(id, updatedUser);
+      return updatedUser;
+    }
+    try {
+      const db = getDb();
+      const [updatedUser] = await db
+        .update(users)
+        .set({ isAdmin: true, updatedAt: new Date() })
+        .where(eq(users.id, id))
+        .returning();
+      if (!updatedUser) {
+        throw new Error(`User with id ${id} not found`);
+      }
+      return updatedUser;
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      const user = this.memoryUsers.get(id);
+      if (!user) {
+        throw new Error(`User with id ${id} not found`);
+      }
+      const updatedUser: User = {
+        ...user,
+        isAdmin: true,
+        updatedAt: new Date(),
+      };
+      this.memoryUsers.set(id, updatedUser);
+      return updatedUser;
+    }
+  }
+
+  async hasAnyAdmin(): Promise<boolean> {
+    if (!hasDb()) {
+      return Array.from(this.memoryUsers.values()).some(user => user.isAdmin);
+    }
+    try {
+      const db = getDb();
+      const adminUsers = await db.select().from(users).where(eq(users.isAdmin, true)).limit(1);
+      return adminUsers.length > 0;
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      return Array.from(this.memoryUsers.values()).some(user => user.isAdmin);
     }
   }
 

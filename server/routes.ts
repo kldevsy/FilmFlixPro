@@ -3,7 +3,24 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { insertProfileSchema, insertWatchHistorySchema } from "@shared/schema";
+import { insertProfileSchema, insertWatchHistorySchema, insertContentSchema } from "@shared/schema";
+
+// Admin authorization middleware
+const isAdmin = async (req: any, res: any, next: any) => {
+  try {
+    const userId = req.user.claims.sub;
+    const user = await storage.getUser(userId);
+    
+    if (!user || !user.isAdmin) {
+      return res.status(403).json({ message: "Acesso negado. Privilégios de administrador necessários." });
+    }
+    
+    next();
+  } catch (error) {
+    console.error("Error checking admin status:", error);
+    res.status(500).json({ message: "Erro interno do servidor" });
+  }
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware - Blueprint integration: javascript_log_in_with_replit
@@ -221,6 +238,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(content);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch content" });
+    }
+  });
+
+  // Admin routes for content management
+  app.post("/api/admin/content", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const contentData = insertContentSchema.parse(req.body);
+      const content = await storage.createContent(contentData);
+      res.json(content);
+    } catch (error) {
+      console.error("Error creating content:", error);
+      res.status(500).json({ message: "Falha ao criar conteúdo" });
+    }
+  });
+
+  app.put("/api/admin/content/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      // Validate updates using partial content schema
+      const updateSchema = insertContentSchema.partial();
+      const updates = updateSchema.parse(req.body);
+      const content = await storage.updateContent(id, updates);
+      res.json(content);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
+      }
+      console.error("Error updating content:", error);
+      res.status(500).json({ message: "Falha ao atualizar conteúdo" });
+    }
+  });
+
+  app.delete("/api/admin/content/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteContent(id);
+      res.json({ message: "Conteúdo deletado com sucesso" });
+    } catch (error) {
+      console.error("Error deleting content:", error);
+      res.status(500).json({ message: "Falha ao deletar conteúdo" });
+    }
+  });
+
+  // Admin route to make a user admin (for initial setup)
+  app.post("/api/admin/make-user-admin/:userId", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await storage.makeUserAdmin(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error making user admin:", error);
+      res.status(500).json({ message: "Falha ao tornar usuário administrador" });
+    }
+  });
+
+  // Special route for first-time admin setup - only allows setting current user as admin if no admins exist
+  app.post("/api/admin/bootstrap", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Check if any admin already exists in the system
+      const hasAdmin = await storage.hasAnyAdmin();
+      if (hasAdmin) {
+        return res.status(409).json({ message: "Já existe um administrador no sistema" });
+      }
+      
+      const user = await storage.makeUserAdmin(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error in admin bootstrap:", error);
+      res.status(500).json({ message: "Falha ao configurar administrador inicial" });
     }
   });
 
