@@ -56,10 +56,12 @@ export default function StreamPlayer({
   const [introEnd, setIntroEnd] = useState(90); // 90 segundos de abertura
   const [isBuffering, setIsBuffering] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [quality, setQuality] = useState("auto");
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
-  let controlsTimeout: NodeJS.Timeout;
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Detecção de mobile
   useEffect(() => {
@@ -79,11 +81,13 @@ export default function StreamPlayer({
 
   // Controle de visibilidade dos controles
   const resetControlsTimeout = () => {
-    clearTimeout(controlsTimeout);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
     setShowControls(true);
     // No mobile, deixar controles visíveis por mais tempo
     const timeout = isMobile ? 5000 : 3000;
-    controlsTimeout = setTimeout(() => {
+    controlsTimeoutRef.current = setTimeout(() => {
       if (isPlaying && !isMobile) setShowControls(false);
     }, timeout);
   };
@@ -252,6 +256,19 @@ export default function StreamPlayer({
     }
   };
 
+  const handleVolumeChange = (newVolume: number) => {
+    if (!videoRef.current) return;
+    setVolume(newVolume);
+    videoRef.current.volume = newVolume;
+    if (newVolume > 0 && isMuted) {
+      setIsMuted(false);
+      videoRef.current.muted = false;
+    } else if (newVolume === 0) {
+      setIsMuted(true);
+      videoRef.current.muted = true;
+    }
+  };
+
   const skipForward = () => {
     if (!videoRef.current) return;
     videoRef.current.currentTime = Math.min(duration, currentTime + 10);
@@ -378,18 +395,18 @@ export default function StreamPlayer({
         )}
       </AnimatePresence>
 
-      {/* Skip Intro Button */}
+      {/* Skip Intro Button - Movido para centro direita para evitar conflito com settings */}
       <AnimatePresence>
         {showSkipIntro && showControls && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="absolute top-6 right-6"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="absolute top-1/2 -translate-y-1/2 right-6 z-20"
           >
             <Button
               onClick={skipIntro}
-              className="bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20"
+              className="bg-black/60 hover:bg-black/80 backdrop-blur-sm border border-white/30 text-white transition-all duration-200"
               data-testid="skip-intro-button"
             >
               <SkipForward className="w-4 h-4 mr-2" />
@@ -636,11 +653,12 @@ export default function StreamPlayer({
                     {!isMobile && <span className="ml-1 text-xs">10s</span>}
                   </Button>
 
-                  {/* Volume Control - Ocultar no mobile para economizar espaço */}
+                  {/* Volume Control - Melhorado com slider interativo */}
                   {!isMobile && (
-                    <div className="flex items-center gap-2 group">
+                    <div className="flex items-center gap-2 group relative">
                       <Button
                         onClick={toggleMute}
+                        onMouseEnter={() => setShowVolumeSlider(true)}
                         variant="ghost"
                         size="sm"
                         className="text-white hover:bg-white/20"
@@ -649,10 +667,28 @@ export default function StreamPlayer({
                         <VolumeIcon className="w-4 h-4" />
                       </Button>
                       
-                      <div className="w-20 h-1 bg-white/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div 
+                        className={`w-20 h-1 bg-white/20 rounded-full cursor-pointer transition-all duration-200 relative ${
+                          showVolumeSlider ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                        onMouseEnter={() => setShowVolumeSlider(true)}
+                        onMouseLeave={() => setShowVolumeSlider(false)}
+                        onClick={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const percentage = (e.clientX - rect.left) / rect.width;
+                          handleVolumeChange(Math.max(0, Math.min(1, percentage)));
+                        }}
+                      >
                         <div
                           className="h-full bg-white rounded-full transition-all"
                           style={{ width: `${volume * 100}%` }}
+                        />
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg transition-opacity"
+                          style={{ 
+                            left: `calc(${volume * 100}% - 6px)`,
+                            opacity: showVolumeSlider ? 1 : 0
+                          }}
                         />
                       </div>
                     </div>
@@ -738,7 +774,12 @@ export default function StreamPlayer({
                 <label className="text-sm font-medium mb-2 block">Qualidade</label>
                 <select
                   className="w-full bg-muted text-foreground px-3 py-2 rounded-lg border border-border text-sm"
-                  defaultValue="auto"
+                  value={quality}
+                  onChange={(e) => {
+                    setQuality(e.target.value);
+                    // Simular mudança de qualidade (em produção, mudaria a fonte do vídeo)
+                    console.log('Qualidade alterada para:', e.target.value);
+                  }}
                   data-testid="quality-selector"
                 >
                   <option value="auto">Automática</option>
