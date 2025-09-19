@@ -48,12 +48,13 @@ export default function AuthHeader() {
         </Link>
 
         <div className="flex items-center space-x-4">
-          <DropdownMenu>
+          <DropdownMenu onOpenChange={(open) => console.log('Menu aberto:', open)}>
             <DropdownMenuTrigger asChild>
               <Button 
                 variant="ghost" 
                 className="flex items-center space-x-2 text-white hover:bg-gray-800/60 rounded-lg px-3 py-2 transition-colors"
                 data-testid="button-profile-menu"
+                onClick={() => console.log('Botão clicado!')}
               >
                 <Avatar className="w-8 h-8">
                   {currentProfile.avatarUrl ? (
