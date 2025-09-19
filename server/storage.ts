@@ -584,7 +584,7 @@ export class DatabaseStorage implements IStorage {
     if (!hasDb()) {
       return Array.from(this.memoryWatchHistory.values())
         .filter(h => h.profileId === profileId)
-        .sort((a, b) => b.watchedAt.getTime() - a.watchedAt.getTime());
+        .sort((a, b) => (b.watchedAt?.getTime() || 0) - (a.watchedAt?.getTime() || 0));
     }
     try {
       const db = getDb();
@@ -597,7 +597,7 @@ export class DatabaseStorage implements IStorage {
       console.warn("Database error, falling back to memory storage:", error);
       return Array.from(this.memoryWatchHistory.values())
         .filter(h => h.profileId === profileId)
-        .sort((a, b) => b.watchedAt.getTime() - a.watchedAt.getTime());
+        .sort((a, b) => (b.watchedAt?.getTime() || 0) - (a.watchedAt?.getTime() || 0));
     }
   }
 
