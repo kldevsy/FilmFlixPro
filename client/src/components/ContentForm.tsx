@@ -81,6 +81,7 @@ export default function ContentForm({ open, onClose, mode, content }: ContentFor
       type: "movie",
       imageUrl: "",
       trailerUrl: "",
+      movieUrl: "",
       director: "",
       cast: [],
       ageRating: "L",
@@ -114,6 +115,7 @@ export default function ContentForm({ open, onClose, mode, content }: ContentFor
         type: content.type as "movie" | "series" | "anime",
         imageUrl: content.imageUrl,
         trailerUrl: content.trailerUrl ?? "",
+        movieUrl: content.movieUrl ?? "",
         director: content.director ?? "",
         cast: content.cast ?? [],
         ageRating: content.ageRating ?? "L",
@@ -392,6 +394,20 @@ export default function ContentForm({ open, onClose, mode, content }: ContentFor
                     <FormLabel>URL do Trailer</FormLabel>
                     <FormControl>
                       <Input {...field} value={field.value ?? ""} data-testid="input-trailer-url" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="movieUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Link do Filme/Série/Anime *</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value ?? ""} placeholder="https://..." data-testid="input-movie-url" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

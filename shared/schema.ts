@@ -13,6 +13,7 @@ export const content = pgTable("content", {
   type: text("type").notNull(), // 'movie', 'series', 'anime'
   imageUrl: text("image_url").notNull(),
   trailerUrl: text("trailer_url"),
+  movieUrl: text("movie_url"), // Link direto para assistir o filme/série/anime
   director: text("director"),
   cast: text("cast").array(),
   ageRating: text("age_rating"), // "L", "10", "12", "14", "16", "18"
