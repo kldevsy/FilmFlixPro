@@ -33,7 +33,7 @@ export default function Home() {
   const selectedProfileId = localStorage.getItem('selectedProfileId');
   
   // Fetch continue watching data
-  const { data: continueWatchingData = [] } = useQuery({
+  const { data: continueWatchingData = [] } = useQuery<any[]>({
     queryKey: ['/api/profiles', selectedProfileId, 'continue-watching'],
     enabled: !!selectedProfileId,
   });
