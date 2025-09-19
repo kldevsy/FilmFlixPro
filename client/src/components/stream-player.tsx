@@ -60,6 +60,8 @@ export default function StreamPlayer({
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const [lastTapTime, setLastTapTime] = useState(0);
+  const [lastTapX, setLastTapX] = useState(0);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -97,8 +99,25 @@ export default function StreamPlayer({
     const video = videoRef.current;
     if (!video) return;
 
+    // Improved time update with less delay using requestAnimationFrame
+    let animationId: number;
     const handleTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
+      if (animationId) cancelAnimationFrame(animationId);
+      animationId = requestAnimationFrame(() => {
+        setCurrentTime(video.currentTime);
+        // Save watch progress for continue watching
+        if (video.currentTime > 30) { // Only save after 30 seconds
+          const profileId = localStorage.getItem('selectedProfileId');
+          if (profileId) {
+            const watchKey = `watch_${profileId}_${content.id}`;
+            localStorage.setItem(watchKey, JSON.stringify({
+              currentTime: video.currentTime,
+              duration: video.duration,
+              lastWatched: Date.now()
+            }));
+          }
+        }
+      });
     };
 
     const handleLoadedMetadata = () => {
@@ -128,8 +147,28 @@ export default function StreamPlayer({
     video.addEventListener('pause', handlePause);
     video.addEventListener('waiting', handleWaiting);
     video.addEventListener('canplay', handleCanPlay);
+    
+    // Load saved watch progress (continue where left off)
+    const profileId = localStorage.getItem('selectedProfileId');
+    if (profileId) {
+      const watchKey = `watch_${profileId}_${content.id}`;
+      const savedData = localStorage.getItem(watchKey);
+      if (savedData) {
+        try {
+          const { currentTime: savedTime, lastWatched } = JSON.parse(savedData);
+          // Only restore if watched within last 7 days and more than 2 minutes in
+          const daysSinceWatch = (Date.now() - lastWatched) / (1000 * 60 * 60 * 24);
+          if (daysSinceWatch <= 7 && savedTime > 120) { // 2 minutes
+            video.currentTime = savedTime;
+          }
+        } catch (error) {
+          console.warn('Error loading watch progress:', error);
+        }
+      }
+    }
 
     return () => {
+      if (animationId) cancelAnimationFrame(animationId);
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('play', handlePlay);
@@ -139,12 +178,48 @@ export default function StreamPlayer({
     };
   }, []);
 
-  // Mouse movement e touch handler
+  const skipForward = () => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = Math.min(duration, currentTime + 10);
+  };
+
+  const skipBackward = () => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = Math.max(0, currentTime - 10);
+  };
+
+  // Mouse movement e touch handler with double tap support
   useEffect(() => {
     const handleMouseMove = () => resetControlsTimeout();
-    const handleTouch = () => {
+    const handleTouch = (e: TouchEvent) => {
+      const currentTime = Date.now();
+      const touch = e.touches[0] || e.changedTouches[0];
+      const touchX = touch.clientX;
+      const screenWidth = window.innerWidth;
+      
       setHasUserInteracted(true);
+      
+      // Check for double tap
+      if (currentTime - lastTapTime < 300 && Math.abs(touchX - lastTapX) < 50) {
+        // Double tap detected
+        const leftZone = touchX < screenWidth * 0.33;
+        const rightZone = touchX > screenWidth * 0.67;
+        
+        if (leftZone) {
+          skipBackward();
+          return;
+        } else if (rightZone) {
+          skipForward();
+          return;
+        }
+      }
+      
+      // Single tap - toggle controls
       setShowControls(!showControls);
+      
+      // Store tap info for double tap detection
+      setLastTapTime(currentTime);
+      setLastTapX(touchX);
     };
     
     if (playerRef.current) {
@@ -165,7 +240,7 @@ export default function StreamPlayer({
         }
       };
     }
-  }, [isPlaying, isMobile, showControls]);
+  }, [isPlaying, isMobile, showControls, lastTapTime, lastTapX, skipBackward, skipForward]);
 
   // Keyboard controls
   useEffect(() => {
@@ -267,16 +342,6 @@ export default function StreamPlayer({
       setIsMuted(true);
       videoRef.current.muted = true;
     }
-  };
-
-  const skipForward = () => {
-    if (!videoRef.current) return;
-    videoRef.current.currentTime = Math.min(duration, currentTime + 10);
-  };
-
-  const skipBackward = () => {
-    if (!videoRef.current) return;
-    videoRef.current.currentTime = Math.max(0, currentTime - 10);
   };
 
   const skipIntro = () => {
@@ -776,13 +841,31 @@ export default function StreamPlayer({
                   className="w-full bg-muted text-foreground px-3 py-2 rounded-lg border border-border text-sm"
                   value={quality}
                   onChange={(e) => {
-                    setQuality(e.target.value);
-                    // Simular mudança de qualidade (em produção, mudaria a fonte do vídeo)
-                    console.log('Qualidade alterada para:', e.target.value);
+                    const newQuality = e.target.value;
+                    setQuality(newQuality);
+                    // In a real implementation, this would change the video source
+                    if (videoRef.current && newQuality !== 'auto') {
+                      const currentTime = videoRef.current.currentTime;
+                      const wasPlaying = isPlaying;
+                      
+                      // Mock quality change by updating video source with quality parameter
+                      const url = new URL(videoUrl);
+                      url.searchParams.set('quality', newQuality);
+                      
+                      videoRef.current.src = url.toString();
+                      videoRef.current.currentTime = currentTime;
+                      
+                      if (wasPlaying) {
+                        videoRef.current.play();
+                      }
+                    }
+                    console.log('Qualidade alterada para:', newQuality);
                   }}
                   data-testid="quality-selector"
                 >
                   <option value="auto">Automática</option>
+                  <option value="2160p">2160p (4K)</option>
+                  <option value="1440p">1440p (2K)</option>
                   <option value="1080p">1080p HD</option>
                   <option value="720p">720p</option>
                   <option value="480p">480p</option>

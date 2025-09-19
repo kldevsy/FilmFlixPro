@@ -14,13 +14,15 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
   const playerRef = useRef<HTMLDivElement>(null);
   
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true); // Muted by default for autoplay
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [isBuffering, setIsBuffering] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [lastTapTime, setLastTapTime] = useState(0);
+  const [lastTapX, setLastTapX] = useState(0);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -50,12 +52,40 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
     }
   }, [isPlaying, hasStarted, isMobile]);
 
+  // Auto-start trailer when component mounts
+  useEffect(() => {
+    const autoStartTrailer = async () => {
+      if (videoRef.current && !hasStarted) {
+        try {
+          // Set muted to allow autoplay in most browsers
+          videoRef.current.muted = true;
+          await videoRef.current.play();
+          setHasStarted(true);
+        } catch (error) {
+          console.log('Autoplay was prevented:', error);
+          // Autoplay failed, user will need to manually start
+        }
+      }
+    };
+    
+    // Small delay to ensure video is ready
+    const timer = setTimeout(autoStartTrailer, 500);
+    return () => clearTimeout(timer);
+  }, [hasStarted]);
+
   // Video event listeners
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const handleTimeUpdate = () => setCurrentTime(video.currentTime);
+    // Improved time update with less delay
+    let animationId: number;
+    const handleTimeUpdate = () => {
+      if (animationId) cancelAnimationFrame(animationId);
+      animationId = requestAnimationFrame(() => {
+        setCurrentTime(video.currentTime);
+      });
+    };
     const handleLoadedMetadata = () => setDuration(video.duration);
     const handlePlay = () => {
       setIsPlaying(true);
@@ -75,6 +105,7 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
     video.addEventListener('canplay', handleCanPlay);
 
     return () => {
+      if (animationId) cancelAnimationFrame(animationId);
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('play', handlePlay);
@@ -89,11 +120,47 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
     resetControlsTimeout();
   }, [resetControlsTimeout]);
 
+  const skipForward = useCallback(() => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = Math.min(duration, currentTime + 10);
+  }, [duration, currentTime]);
+
+  const skipBackward = useCallback(() => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = Math.max(0, currentTime - 10);
+  }, [currentTime]);
+
   const handleTouchToggle = useCallback((e: TouchEvent) => {
     e.preventDefault();
+    
+    const currentTime = Date.now();
+    const touch = e.touches[0] || e.changedTouches[0];
+    const touchX = touch.clientX;
+    const screenWidth = window.innerWidth;
+    
+    // Check for double tap
+    if (currentTime - lastTapTime < 300 && Math.abs(touchX - lastTapX) < 50) {
+      // Double tap detected
+      const leftZone = touchX < screenWidth * 0.33;
+      const rightZone = touchX > screenWidth * 0.67;
+      
+      if (leftZone) {
+        skipBackward();
+        return;
+      } else if (rightZone) {
+        skipForward();
+        return;
+      }
+    }
+    
+    // Single tap - toggle controls
     setShowControls(prev => !prev);
     resetControlsTimeout();
-  }, [resetControlsTimeout]);
+    
+    // Store tap info for double tap detection
+    setLastTapTime(currentTime);
+    setLastTapX(touchX);
+  }, [resetControlsTimeout, lastTapTime, lastTapX, skipBackward, skipForward]);
 
   useEffect(() => {
     const element = playerRef.current;
@@ -149,15 +216,6 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
     setIsMuted(!isMuted);
   };
 
-  const skipForward = () => {
-    if (!videoRef.current) return;
-    videoRef.current.currentTime = Math.min(duration, currentTime + 10);
-  };
-
-  const skipBackward = () => {
-    if (!videoRef.current) return;
-    videoRef.current.currentTime = Math.max(0, currentTime - 10);
-  };
 
   const handleProgressClick = (e: React.MouseEvent | React.TouchEvent) => {
     if (!videoRef.current) return;
@@ -199,6 +257,8 @@ export default function TrailerPlayer({ videoUrl, title, onClose }: TrailerPlaye
         playsInline={true}
         preload="metadata"
         crossOrigin="anonymous"
+        autoPlay
+        muted
         data-testid="trailer-video"
       />
 
