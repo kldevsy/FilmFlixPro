@@ -41,7 +41,8 @@ export default function ProfileSelect() {
   const [uploadedMedia, setUploadedMedia] = useState<{ dataUrl: string; mimeType: string } | null>(null);
   const [initialAvatarUrl, setInitialAvatarUrl] = useState<string | null>(null);
   const [avatarRemoved, setAvatarRemoved] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const createFileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
   
   const { data: profiles, isLoading } = useQuery<Profile[]>({
     queryKey: ['/api/profiles'],
@@ -126,10 +127,26 @@ export default function ProfileSelect() {
     return new Promise((resolve) => {
       const video = document.createElement('video');
       video.preload = 'metadata';
+      let objectUrl: string | null = null;
+      
+      const cleanup = () => {
+        if (objectUrl) {
+          try {
+            URL.revokeObjectURL(objectUrl);
+          } catch (error) {
+            console.warn('Error revoking object URL:', error);
+          }
+          objectUrl = null;
+        }
+        video.onloadedmetadata = null;
+        video.onerror = null;
+        video.src = '';
+      };
       
       video.onloadedmetadata = () => {
-        URL.revokeObjectURL(video.src);
         const duration = video.duration;
+        cleanup();
+        
         if (duration > 10) { // 10 seconds limit
           alert('O vídeo deve ter no máximo 10 segundos de duração.');
           resolve(false);
@@ -139,12 +156,19 @@ export default function ProfileSelect() {
       };
       
       video.onerror = () => {
-        URL.revokeObjectURL(video.src);
+        cleanup();
         alert('Erro ao processar o vídeo. Tente outro arquivo.');
         resolve(false);
       };
       
-      video.src = URL.createObjectURL(file);
+      try {
+        objectUrl = URL.createObjectURL(file);
+        video.src = objectUrl;
+      } catch (error) {
+        cleanup();
+        alert('Erro ao processar o vídeo. Tente outro arquivo.');
+        resolve(false);
+      }
     });
   };
 
@@ -197,8 +221,12 @@ export default function ProfileSelect() {
   const removeMedia = () => {
     setUploadedMedia(null);
     setAvatarRemoved(true);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    // Clear both file inputs to avoid state conflicts
+    if (createFileInputRef.current) {
+      createFileInputRef.current.value = '';
+    }
+    if (editFileInputRef.current) {
+      editFileInputRef.current.value = '';
     }
   };
 
@@ -386,7 +414,7 @@ export default function ProfileSelect() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => createFileInputRef.current?.click()}
                         className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-purple-500"
                         data-testid="button-upload-image"
                       >
@@ -396,7 +424,7 @@ export default function ProfileSelect() {
                     </div>
                     
                     <input
-                      ref={fileInputRef}
+                      ref={createFileInputRef}
                       type="file"
                       accept="image/*,video/mp4,video/webm,video/quicktime,.gif,.mp4,.webm,.mov"
                       onChange={handleImageUpload}
@@ -562,7 +590,7 @@ export default function ProfileSelect() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => editFileInputRef.current?.click()}
                         className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-purple-500"
                         data-testid="button-upload-image-edit"
                       >
@@ -572,7 +600,7 @@ export default function ProfileSelect() {
                     </div>
                     
                     <input
-                      ref={fileInputRef}
+                      ref={editFileInputRef}
                       type="file"
                       accept="image/*,video/mp4,video/webm,video/quicktime,.gif,.mp4,.webm,.mov"
                       onChange={handleImageUpload}
