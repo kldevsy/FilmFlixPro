@@ -18,6 +18,26 @@ function AuthenticatedRouter() {
   useEffect(() => {
     const profileId = localStorage.getItem('selectedProfileId');
     setSelectedProfileId(profileId);
+    
+    // Listen for storage changes to update when profile is selected
+    const handleStorageChange = () => {
+      const newProfileId = localStorage.getItem('selectedProfileId');
+      setSelectedProfileId(newProfileId);
+    };
+    
+    // Custom event listener for when we update localStorage programmatically
+    const handleProfileSelection = () => {
+      const newProfileId = localStorage.getItem('selectedProfileId');
+      setSelectedProfileId(newProfileId);
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('profileSelected', handleProfileSelection);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('profileSelected', handleProfileSelection);
+    };
   }, []);
 
   // If no profile is selected, show profile selection

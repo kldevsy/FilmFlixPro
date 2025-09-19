@@ -71,6 +71,8 @@ export default function ProfileSelect() {
 
   const selectProfile = (profileId: string) => {
     localStorage.setItem('selectedProfileId', profileId);
+    // Dispatch custom event to notify App component of profile selection
+    window.dispatchEvent(new Event('profileSelected'));
     navigate('/');
   };
 
