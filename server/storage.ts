@@ -422,8 +422,11 @@ export class DatabaseStorage implements IStorage {
   async upsertUser(userData: UpsertUser): Promise<User> {
     if (!hasDb()) {
       const user: User = {
-        ...userData,
         id: userData.id || randomUUID(),
+        email: userData.email ?? null,
+        firstName: userData.firstName ?? null,
+        lastName: userData.lastName ?? null,
+        profileImageUrl: userData.profileImageUrl ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
