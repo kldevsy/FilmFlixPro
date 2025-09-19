@@ -36,7 +36,7 @@ export default function ProfileSelect() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [uploadedMedia, setUploadedMedia] = useState<{ dataUrl: string; mimeType: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { data: profiles, isLoading } = useQuery<Profile[]>({
@@ -56,7 +56,7 @@ export default function ProfileSelect() {
     mutationFn: async (data: { name: string; isKids: boolean; avatarUrl?: string }) => {
       const profileData = {
         ...data,
-        avatarUrl: uploadedImage || null
+        avatarUrl: uploadedMedia?.dataUrl || null
       };
       const response = await apiRequest('POST', '/api/profiles', profileData);
       return await response.json();
@@ -64,7 +64,7 @@ export default function ProfileSelect() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       setShowCreateDialog(false);
-      setUploadedImage(null);
+      setUploadedMedia(null);
       form.reset();
     },
   });
@@ -76,29 +76,79 @@ export default function ProfileSelect() {
     navigate('/');
   };
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const validateVideoDuration = (file: File): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      
+      video.onloadedmetadata = () => {
+        URL.revokeObjectURL(video.src);
+        const duration = video.duration;
+        if (duration > 10) { // 10 seconds limit
+          alert('O vídeo deve ter no máximo 10 segundos de duração.');
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      };
+      
+      video.onerror = () => {
+        URL.revokeObjectURL(video.src);
+        alert('Erro ao processar o vídeo. Tente outro arquivo.');
+        resolve(false);
+      };
+      
+      video.src = URL.createObjectURL(file);
+    });
+  };
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Validate file type and size
-      if (!file.type.startsWith('image/')) {
-        alert('Por favor, selecione apenas arquivos de imagem.');
+      // Validate file type
+      const allowedTypes = [
+        'image/', 
+        'video/mp4', 
+        'video/webm', 
+        'video/quicktime', // .mov files
+        'image/gif'
+      ];
+      
+      const isValidType = allowedTypes.some(type => file.type.startsWith(type) || file.type === type);
+      
+      if (!isValidType) {
+        alert('Por favor, selecione arquivos de imagem, GIF ou vídeos curtos (.mp4, .webm, .mov).');
         return;
       }
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        alert('A imagem deve ter no máximo 5MB.');
+      
+      // Size limit: 5MB for all file types to avoid payload issues
+      const sizeLimit = 5 * 1024 * 1024; // 5MB
+      
+      if (file.size > sizeLimit) {
+        alert('O arquivo deve ter no máximo 5MB.');
         return;
+      }
+
+      // Validate video duration if it's a video file
+      const isVideo = file.type.startsWith('video/');
+      if (isVideo) {
+        const isValidDuration = await validateVideoDuration(file);
+        if (!isValidDuration) return;
       }
 
       const reader = new FileReader();
       reader.onload = (e) => {
-        setUploadedImage(e.target?.result as string);
+        setUploadedMedia({ 
+          dataUrl: e.target?.result as string, 
+          mimeType: file.type 
+        });
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const removeImage = () => {
-    setUploadedImage(null);
+  const removeMedia = () => {
+    setUploadedMedia(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -141,7 +191,18 @@ export default function ProfileSelect() {
                     <div className="relative mb-6">
                       <Avatar className="w-24 h-24 mx-auto ring-4 ring-gray-600 group-hover:ring-purple-500/50 transition-all duration-300">
                         {profile.avatarUrl ? (
-                          <AvatarImage src={profile.avatarUrl} alt={profile.name} className="object-cover" />
+                          profile.avatarUrl.startsWith('data:video/') ? (
+                            <video 
+                              src={profile.avatarUrl} 
+                              className="w-full h-full object-cover rounded-full" 
+                              muted 
+                              loop 
+                              playsInline 
+                              autoPlay
+                            />
+                          ) : (
+                            <AvatarImage src={profile.avatarUrl} alt={profile.name} className="object-cover" />
+                          )
                         ) : (
                           <AvatarFallback className="bg-gradient-to-br from-purple-600 to-cyan-600 text-white text-3xl font-bold">
                             {profile.name.charAt(0).toUpperCase()}
@@ -210,8 +271,19 @@ export default function ProfileSelect() {
                   <div className="flex flex-col items-center space-y-4">
                     <div className="relative group">
                       <Avatar className="w-24 h-24 ring-4 ring-gray-600 group-hover:ring-purple-500 transition-all duration-300">
-                        {uploadedImage ? (
-                          <AvatarImage src={uploadedImage} alt="Preview" className="object-cover" />
+                        {uploadedMedia ? (
+                          uploadedMedia.mimeType.startsWith('video/') ? (
+                            <video 
+                              src={uploadedMedia.dataUrl} 
+                              className="w-full h-full object-cover rounded-full" 
+                              muted 
+                              loop 
+                              playsInline 
+                              autoPlay
+                            />
+                          ) : (
+                            <AvatarImage src={uploadedMedia.dataUrl} alt="Preview" className="object-cover" />
+                          )
                         ) : (
                           <AvatarFallback className="bg-gradient-to-br from-purple-600 to-cyan-600 text-white text-2xl font-bold">
                             <Camera className="w-8 h-8" />
@@ -219,12 +291,12 @@ export default function ProfileSelect() {
                         )}
                       </Avatar>
                       
-                      {uploadedImage && (
+                      {uploadedMedia && (
                         <Button
                           type="button"
                           size="sm"
                           variant="destructive"
-                          onClick={removeImage}
+                          onClick={removeMedia}
                           className="absolute -top-2 -right-2 w-6 h-6 rounded-full p-0"
                         >
                           <X className="w-3 h-3" />
@@ -242,14 +314,14 @@ export default function ProfileSelect() {
                         data-testid="button-upload-image"
                       >
                         <Upload className="w-4 h-4 mr-2" />
-                        {uploadedImage ? 'Trocar Foto' : 'Adicionar Foto'}
+                        {uploadedMedia ? 'Trocar Mídia' : 'Adicionar Foto/GIF/Vídeo'}
                       </Button>
                     </div>
                     
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/*,video/mp4,video/webm,video/quicktime,.gif,.mp4,.webm,.mov"
                       onChange={handleImageUpload}
                       className="hidden"
                     />
@@ -308,7 +380,7 @@ export default function ProfileSelect() {
                       variant="outline" 
                       onClick={() => {
                         setShowCreateDialog(false);
-                        setUploadedImage(null);
+                        setUploadedMedia(null);
                         form.reset();
                       }}
                       className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-gray-500"
