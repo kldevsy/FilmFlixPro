@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
-import { LogOut, User, Users } from "lucide-react";
+import { LogOut, User, Users, Settings, ChevronDown } from "lucide-react";
 
 type Profile = {
   id: string;
@@ -52,8 +52,8 @@ export default function AuthHeader() {
             <DropdownMenuTrigger asChild>
               <Button 
                 variant="ghost" 
-                className="flex items-center space-x-2 text-white hover:bg-gray-800"
-                onClick={() => console.log('Botão de perfil clicado!')}
+                className="flex items-center space-x-2 text-white hover:bg-gray-800/60 rounded-lg px-3 py-2 transition-colors"
+                data-testid="button-profile-menu"
               >
                 <Avatar className="w-8 h-8">
                   {currentProfile.avatarUrl ? (
@@ -64,62 +64,102 @@ export default function AuthHeader() {
                     </AvatarFallback>
                   )}
                 </Avatar>
-                <span className="text-sm" data-testid={`text-current-profile-${currentProfile.id}`}>
+                <span className="text-sm font-medium" data-testid={`text-current-profile-${currentProfile.id}`}>
                   {currentProfile.name}
                 </span>
+                <ChevronDown className="w-4 h-4 ml-1" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 bg-gray-800 border-gray-700">
-              <div className="px-2 py-1.5 text-sm text-gray-300">
-                Perfis Disponíveis
-              </div>
-              <DropdownMenuSeparator className="bg-gray-700" />
-              
-              {profiles.map((profile) => (
-                <DropdownMenuItem
-                  key={profile.id}
-                  onClick={() => switchProfile(profile.id)}
-                  className={`cursor-pointer text-gray-300 hover:bg-gray-700 hover:text-white ${
-                    profile.id === selectedProfileId ? 'bg-gray-700 text-white' : ''
-                  }`}
-                  data-testid={`menu-item-profile-${profile.id}`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <Avatar className="w-6 h-6">
-                      {profile.avatarUrl ? (
-                        <AvatarImage src={profile.avatarUrl} alt={profile.name} className="object-cover" />
-                      ) : (
-                        <AvatarFallback className="bg-purple-600 text-white text-xs">
-                          {profile.name.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                    <span>{profile.name}</span>
-                    {profile.isKids && (
-                      <span className="text-xs text-purple-400 bg-purple-400/20 px-1.5 py-0.5 rounded">
-                        Infantil
-                      </span>
+            <DropdownMenuContent className="w-64 bg-gray-900 border-gray-700 shadow-xl" align="end">
+              {/* Perfil Atual */}
+              <div className="px-3 py-2 border-b border-gray-700">
+                <div className="flex items-center space-x-3">
+                  <Avatar className="w-10 h-10">
+                    {currentProfile.avatarUrl ? (
+                      <AvatarImage src={currentProfile.avatarUrl} alt={currentProfile.name} className="object-cover" />
+                    ) : (
+                      <AvatarFallback className="bg-purple-600 text-white text-sm">
+                        {currentProfile.name.charAt(0).toUpperCase()}
+                      </AvatarFallback>
                     )}
+                  </Avatar>
+                  <div>
+                    <p className="text-white font-medium text-sm">{currentProfile.name}</p>
+                    <p className="text-gray-400 text-xs">Perfil ativo</p>
                   </div>
-                </DropdownMenuItem>
-              ))}
+                </div>
+              </div>
+
+              {/* Outros Perfis Disponíveis */}
+              {profiles.length > 1 && (
+                <>
+                  <div className="px-3 py-2">
+                    <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">
+                      Trocar Perfil
+                    </p>
+                  </div>
+                  {profiles
+                    .filter(profile => profile.id !== selectedProfileId)
+                    .map((profile) => (
+                      <DropdownMenuItem
+                        key={profile.id}
+                        onClick={() => switchProfile(profile.id)}
+                        className="cursor-pointer text-gray-300 hover:bg-gray-800 hover:text-white mx-2 rounded-md"
+                        data-testid={`menu-item-profile-${profile.id}`}
+                      >
+                        <div className="flex items-center space-x-3 w-full">
+                          <Avatar className="w-8 h-8">
+                            {profile.avatarUrl ? (
+                              <AvatarImage src={profile.avatarUrl} alt={profile.name} className="object-cover" />
+                            ) : (
+                              <AvatarFallback className="bg-purple-600 text-white text-xs">
+                                {profile.name.charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            )}
+                          </Avatar>
+                          <div className="flex-1">
+                            <span className="text-sm">{profile.name}</span>
+                            {profile.isKids && (
+                              <span className="text-xs text-purple-400 bg-purple-400/20 px-1.5 py-0.5 rounded ml-2">
+                                Infantil
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  <DropdownMenuSeparator className="bg-gray-700 mx-2" />
+                </>
+              )}
               
-              <DropdownMenuSeparator className="bg-gray-700" />
+              {/* Opções do Menu */}
               <DropdownMenuItem
                 onClick={() => navigate('/profiles')}
-                className="cursor-pointer text-gray-300 hover:bg-gray-700 hover:text-white"
+                className="cursor-pointer text-gray-300 hover:bg-gray-800 hover:text-white mx-2 rounded-md"
                 data-testid="menu-item-manage-profiles"
               >
-                <Users className="w-4 h-4 mr-2" />
-                Gerenciar Perfis
+                <Users className="w-4 h-4 mr-3" />
+                <span>Gerenciar Perfis</span>
               </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => navigate('/settings')}
+                className="cursor-pointer text-gray-300 hover:bg-gray-800 hover:text-white mx-2 rounded-md"
+                data-testid="menu-item-settings"
+              >
+                <Settings className="w-4 h-4 mr-3" />
+                <span>Configurações</span>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator className="bg-gray-700 mx-2" />
+              
               <DropdownMenuItem
                 onClick={() => window.location.href = '/api/logout'}
-                className="cursor-pointer text-red-400 hover:bg-red-600/20 hover:text-red-300"
+                className="cursor-pointer text-red-400 hover:bg-red-600/20 hover:text-red-300 mx-2 rounded-md"
                 data-testid="menu-item-logout"
               >
-                <LogOut className="w-4 h-4 mr-2" />
-                Sair
+                <LogOut className="w-4 h-4 mr-3" />
+                <span>Sair</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
