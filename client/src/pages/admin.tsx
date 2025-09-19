@@ -83,6 +83,16 @@ export default function Admin() {
   const [alertSearchTerm, setAlertSearchTerm] = useState("");
   const [alertTypeFilter, setAlertTypeFilter] = useState<string>("all");
   const [selectedAlertTemplate, setSelectedAlertTemplate] = useState<string>("custom");
+  
+  // Tab management state
+  const [activeTab, setActiveTab] = useState("content");
+  
+  // Select overlay states to prevent DOM errors
+  const [typeSelectOpen, setTypeSelectOpen] = useState(false);
+  const [categorySelectOpen, setCategorySelectOpen] = useState(false);
+  const [roleSelectOpen, setRoleSelectOpen] = useState(false);
+  const [alertTypeSelectOpen, setAlertTypeSelectOpen] = useState(false);
+  const [alertTemplateSelectOpen, setAlertTemplateSelectOpen] = useState(false);
 
   // User edit form
   const userEditForm = useForm({
@@ -177,6 +187,35 @@ export default function Admin() {
       alertForm.setValue('message', templateData.message);
       alertForm.setValue('type', templateData.type);
     }
+  };
+
+  // Handle tab change and close any open dialogs/portals
+  const handleTabChange = (value: string) => {
+    // Close all dialogs and overlays to prevent DOM manipulation errors
+    setShowUserEditDialog(false);
+    setShowCreateAlertDialog(false);
+    setFormOpen(false); // Close ContentForm modal
+    setSelectedUser(null);
+    setSelectedContent(null);
+    
+    // Close all Select dropdowns
+    setTypeSelectOpen(false);
+    setCategorySelectOpen(false);
+    setRoleSelectOpen(false);
+    setAlertTypeSelectOpen(false);
+    setAlertTemplateSelectOpen(false);
+    
+    // Reset forms when leaving their respective tabs
+    if (activeTab === "alerts" && value !== "alerts") {
+      alertForm.reset();
+      setSelectedAlertTemplate("custom");
+    }
+    
+    if (activeTab === "users" && value !== "users") {
+      userEditForm.reset();
+    }
+    
+    setActiveTab(value);
   };
 
   // Bootstrap admin mutation
@@ -298,7 +337,6 @@ export default function Admin() {
       return response.json();
     },
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/notifications'] });
       setShowCreateAlertDialog(false);
       alertForm.reset();
       toast({
@@ -436,7 +474,7 @@ export default function Admin() {
           </Card>
         )}
 
-        <Tabs defaultValue="content" className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid w-full grid-cols-3 bg-gray-800">
             <TabsTrigger value="content" data-testid="tab-content">
               Conteúdo ({contents.length})
@@ -498,7 +536,12 @@ export default function Admin() {
                   </div>
                   
                   {/* Type Filter */}
-                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <Select 
+                    value={typeFilter} 
+                    onValueChange={setTypeFilter}
+                    open={typeSelectOpen}
+                    onOpenChange={setTypeSelectOpen}
+                  >
                     <SelectTrigger data-testid="select-type-filter">
                       <SelectValue placeholder="Filtrar por tipo" />
                     </SelectTrigger>
@@ -511,7 +554,12 @@ export default function Admin() {
                   </Select>
                   
                   {/* Category Filter */}
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <Select 
+                    value={categoryFilter} 
+                    onValueChange={setCategoryFilter}
+                    open={categorySelectOpen}
+                    onOpenChange={setCategorySelectOpen}
+                  >
                     <SelectTrigger data-testid="select-category-filter">
                       <SelectValue placeholder="Filtrar por categoria" />
                     </SelectTrigger>
@@ -654,7 +702,12 @@ export default function Admin() {
                   </div>
                   
                   {/* Role Filter */}
-                  <Select value={userRoleFilter} onValueChange={setUserRoleFilter}>
+                  <Select 
+                    value={userRoleFilter} 
+                    onValueChange={setUserRoleFilter}
+                    open={roleSelectOpen}
+                    onOpenChange={setRoleSelectOpen}
+                  >
                     <SelectTrigger data-testid="select-role-filter">
                       <SelectValue placeholder="Filtrar por função" />
                     </SelectTrigger>
@@ -966,7 +1019,16 @@ export default function Admin() {
         />
 
         {/* User Edit Dialog */}
-        <Dialog open={showUserEditDialog} onOpenChange={setShowUserEditDialog}>
+        <Dialog 
+          open={showUserEditDialog} 
+          onOpenChange={(open) => {
+            setShowUserEditDialog(open);
+            if (!open) {
+              setSelectedUser(null);
+              userEditForm.reset();
+            }
+          }}
+        >
           <DialogContent className="bg-gray-900 border-gray-700 text-white">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1059,7 +1121,16 @@ export default function Admin() {
         </Dialog>
         
         {/* Create Alert Dialog */}
-        <Dialog open={showCreateAlertDialog} onOpenChange={setShowCreateAlertDialog}>
+        <Dialog 
+          open={showCreateAlertDialog} 
+          onOpenChange={(open) => {
+            setShowCreateAlertDialog(open);
+            if (!open) {
+              alertForm.reset();
+              setSelectedAlertTemplate("custom");
+            }
+          }}
+        >
           <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1076,7 +1147,12 @@ export default function Admin() {
                 {/* Template Selection */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Modelo de Alerta</label>
-                  <Select value={selectedAlertTemplate} onValueChange={handleAlertTemplateChange}>
+                  <Select 
+                    value={selectedAlertTemplate} 
+                    onValueChange={handleAlertTemplateChange}
+                    open={alertTemplateSelectOpen}
+                    onOpenChange={setAlertTemplateSelectOpen}
+                  >
                     <SelectTrigger className="bg-gray-800 border-gray-600" data-testid="select-alert-template">
                       <SelectValue placeholder="Escolha um modelo" />
                     </SelectTrigger>
@@ -1098,7 +1174,12 @@ export default function Admin() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Tipo de Alerta</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select 
+                          onValueChange={field.onChange} 
+                          value={field.value}
+                          open={alertTypeSelectOpen}
+                          onOpenChange={setAlertTypeSelectOpen}
+                        >
                           <FormControl>
                             <SelectTrigger className="bg-gray-800 border-gray-600" data-testid="select-alert-type">
                               <SelectValue placeholder="Selecione o tipo" />
