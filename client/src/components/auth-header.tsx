@@ -30,13 +30,6 @@ export default function AuthHeader() {
 
   const currentProfile = profiles.find(p => p.id === selectedProfileId) || profiles[0];
 
-  console.log('Debug AuthHeader:', { 
-    user: !!user, 
-    profiles: profiles.length, 
-    selectedProfileId, 
-    currentProfile: !!currentProfile 
-  });
-
   const switchProfile = (profileId: string) => {
     localStorage.setItem('selectedProfileId', profileId);
     setSelectedProfileId(profileId);
@@ -44,7 +37,6 @@ export default function AuthHeader() {
   };
 
   if (!user || !currentProfile || profiles.length === 0) {
-    console.log('AuthHeader not rendering because:', { user: !!user, currentProfile: !!currentProfile, profilesLength: profiles.length });
     return null;
   }
 
