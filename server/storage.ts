@@ -12,7 +12,7 @@ import {
   type WatchHistory,
   type InsertWatchHistory
 } from "@shared/schema";
-import { db } from "./db";
+import { getDb, hasDb } from "./db";
 import { eq, desc, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
@@ -46,9 +46,15 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   private memoryContent: Map<string, Content>;
+  private memoryUsers: Map<string, User>;
+  private memoryProfiles: Map<string, Profile>;
+  private memoryWatchHistory: Map<string, WatchHistory>;
 
   constructor() {
     this.memoryContent = new Map();
+    this.memoryUsers = new Map();
+    this.memoryProfiles = new Map();
+    this.memoryWatchHistory = new Map();
     this.seedData();
   }
 
@@ -400,84 +406,264 @@ export class DatabaseStorage implements IStorage {
 
   // User operations - required for Replit Auth
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    if (!hasDb()) {
+      return this.memoryUsers.get(id);
+    }
+    try {
+      const db = getDb();
+      const [user] = await db.select().from(users).where(eq(users.id, id));
+      return user;
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      return this.memoryUsers.get(id);
+    }
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    return user;
+    if (!hasDb()) {
+      const user: User = {
+        ...userData,
+        id: userData.id || randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.memoryUsers.set(user.id, user);
+      return user;
+    }
+    try {
+      const db = getDb();
+      const [user] = await db
+        .insert(users)
+        .values(userData)
+        .onConflictDoUpdate({
+          target: users.id,
+          set: {
+            ...userData,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      return user;
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      const user: User = {
+        ...userData,
+        id: userData.id || randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.memoryUsers.set(user.id, user);
+      return user;
+    }
   }
 
   // Profile operations
   async getProfilesByUser(userId: string): Promise<Profile[]> {
-    return await db.select().from(profiles).where(eq(profiles.userId, userId));
+    if (!hasDb()) {
+      return Array.from(this.memoryProfiles.values()).filter(p => p.userId === userId);
+    }
+    try {
+      const db = getDb();
+      return await db.select().from(profiles).where(eq(profiles.userId, userId));
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      return Array.from(this.memoryProfiles.values()).filter(p => p.userId === userId);
+    }
   }
 
   async createProfile(profile: InsertProfile): Promise<Profile> {
-    const [newProfile] = await db.insert(profiles).values(profile).returning();
-    return newProfile;
+    if (!hasDb()) {
+      const newProfile: Profile = {
+        ...profile,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.memoryProfiles.set(newProfile.id, newProfile);
+      return newProfile;
+    }
+    try {
+      const db = getDb();
+      const [newProfile] = await db.insert(profiles).values(profile).returning();
+      return newProfile;
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      const newProfile: Profile = {
+        ...profile,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.memoryProfiles.set(newProfile.id, newProfile);
+      return newProfile;
+    }
   }
 
   async getProfile(id: string): Promise<Profile | undefined> {
-    const [profile] = await db.select().from(profiles).where(eq(profiles.id, id));
-    return profile;
+    if (!hasDb()) {
+      return this.memoryProfiles.get(id);
+    }
+    try {
+      const db = getDb();
+      const [profile] = await db.select().from(profiles).where(eq(profiles.id, id));
+      return profile;
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      return this.memoryProfiles.get(id);
+    }
   }
 
   async updateProfile(id: string, updates: Partial<InsertProfile>): Promise<Profile> {
-    const [updatedProfile] = await db
-      .update(profiles)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(profiles.id, id))
-      .returning();
-    return updatedProfile;
+    if (!hasDb()) {
+      const existing = this.memoryProfiles.get(id);
+      if (!existing) {
+        throw new Error(`Profile with id ${id} not found`);
+      }
+      const updatedProfile: Profile = {
+        ...existing,
+        ...updates,
+        updatedAt: new Date(),
+      };
+      this.memoryProfiles.set(id, updatedProfile);
+      return updatedProfile;
+    }
+    try {
+      const db = getDb();
+      const [updatedProfile] = await db
+        .update(profiles)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(profiles.id, id))
+        .returning();
+      return updatedProfile;
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      const existing = this.memoryProfiles.get(id);
+      if (!existing) {
+        throw new Error(`Profile with id ${id} not found`);
+      }
+      const updatedProfile: Profile = {
+        ...existing,
+        ...updates,
+        updatedAt: new Date(),
+      };
+      this.memoryProfiles.set(id, updatedProfile);
+      return updatedProfile;
+    }
   }
 
   async deleteProfile(id: string): Promise<void> {
-    await db.delete(profiles).where(eq(profiles.id, id));
+    if (!hasDb()) {
+      this.memoryProfiles.delete(id);
+      return;
+    }
+    try {
+      const db = getDb();
+      await db.delete(profiles).where(eq(profiles.id, id));
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      this.memoryProfiles.delete(id);
+    }
   }
 
   // Watch history operations
   async getWatchHistory(profileId: string): Promise<WatchHistory[]> {
-    return await db
-      .select()
-      .from(watchHistory)
-      .where(eq(watchHistory.profileId, profileId))
-      .orderBy(desc(watchHistory.watchedAt));
+    if (!hasDb()) {
+      return Array.from(this.memoryWatchHistory.values())
+        .filter(h => h.profileId === profileId)
+        .sort((a, b) => b.watchedAt.getTime() - a.watchedAt.getTime());
+    }
+    try {
+      const db = getDb();
+      return await db
+        .select()
+        .from(watchHistory)
+        .where(eq(watchHistory.profileId, profileId))
+        .orderBy(desc(watchHistory.watchedAt));
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      return Array.from(this.memoryWatchHistory.values())
+        .filter(h => h.profileId === profileId)
+        .sort((a, b) => b.watchedAt.getTime() - a.watchedAt.getTime());
+    }
   }
 
   async updateWatchProgress(data: InsertWatchHistory): Promise<WatchHistory> {
-    const [existing] = await db
-      .select()
-      .from(watchHistory)
-      .where(
-        and(
-          eq(watchHistory.profileId, data.profileId),
-          eq(watchHistory.contentId, data.contentId),
-          data.episodeNumber ? eq(watchHistory.episodeNumber, data.episodeNumber) : undefined
-        )
+    if (!hasDb()) {
+      // Find existing watch history entry
+      const existing = Array.from(this.memoryWatchHistory.values()).find(
+        h => h.profileId === data.profileId && 
+             h.contentId === data.contentId &&
+             (!data.episodeNumber || h.episodeNumber === data.episodeNumber)
       );
 
-    if (existing) {
-      const [updated] = await db
-        .update(watchHistory)
-        .set({ ...data, watchedAt: new Date() })
-        .where(eq(watchHistory.id, existing.id))
-        .returning();
-      return updated;
-    } else {
-      const [newHistory] = await db.insert(watchHistory).values(data).returning();
-      return newHistory;
+      if (existing) {
+        const updated: WatchHistory = {
+          ...existing,
+          ...data,
+          watchedAt: new Date(),
+        };
+        this.memoryWatchHistory.set(existing.id, updated);
+        return updated;
+      } else {
+        const newHistory: WatchHistory = {
+          ...data,
+          id: randomUUID(),
+          watchedAt: new Date(),
+        };
+        this.memoryWatchHistory.set(newHistory.id, newHistory);
+        return newHistory;
+      }
+    }
+    try {
+      const db = getDb();
+      const [existing] = await db
+        .select()
+        .from(watchHistory)
+        .where(
+          and(
+            eq(watchHistory.profileId, data.profileId),
+            eq(watchHistory.contentId, data.contentId),
+            data.episodeNumber ? eq(watchHistory.episodeNumber, data.episodeNumber) : undefined
+          )
+        );
+
+      if (existing) {
+        const [updated] = await db
+          .update(watchHistory)
+          .set({ ...data, watchedAt: new Date() })
+          .where(eq(watchHistory.id, existing.id))
+          .returning();
+        return updated;
+      } else {
+        const [newHistory] = await db.insert(watchHistory).values(data).returning();
+        return newHistory;
+      }
+    } catch (error) {
+      console.warn("Database error, falling back to memory storage:", error);
+      // Fallback to memory implementation
+      const existing = Array.from(this.memoryWatchHistory.values()).find(
+        h => h.profileId === data.profileId && 
+             h.contentId === data.contentId &&
+             (!data.episodeNumber || h.episodeNumber === data.episodeNumber)
+      );
+
+      if (existing) {
+        const updated: WatchHistory = {
+          ...existing,
+          ...data,
+          watchedAt: new Date(),
+        };
+        this.memoryWatchHistory.set(existing.id, updated);
+        return updated;
+      } else {
+        const newHistory: WatchHistory = {
+          ...data,
+          id: randomUUID(),
+          watchedAt: new Date(),
+        };
+        this.memoryWatchHistory.set(newHistory.id, newHistory);
+        return newHistory;
+      }
     }
   }
 
