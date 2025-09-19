@@ -50,7 +50,11 @@ export default function AuthHeader() {
         <div className="flex items-center space-x-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center space-x-2 text-white hover:bg-gray-800">
+              <Button 
+                variant="ghost" 
+                className="flex items-center space-x-2 text-white hover:bg-gray-800"
+                onClick={() => console.log('Botão de perfil clicado!')}
+              >
                 <Avatar className="w-8 h-8">
                   {currentProfile.avatarUrl ? (
                     <AvatarImage src={currentProfile.avatarUrl} alt={currentProfile.name} className="object-cover" />
