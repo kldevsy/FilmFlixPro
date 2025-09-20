@@ -1,6 +1,6 @@
 import { createServer } from '../dist/server/index.js';
+const app = createServer();
 
 export default function handler(req, res) {
-  const app = createServer();
   return app(req, res);
 }
