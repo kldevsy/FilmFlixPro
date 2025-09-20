@@ -9,6 +9,7 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import Home from "@/pages/home";
 import Auth from "@/pages/auth";
 import ProfileSelect from "@/pages/profile-select";
+import ProfileSettings from "@/pages/profile-settings";
 import Admin from "@/pages/admin";
 import NotFound from "@/pages/not-found";
 import { useEffect, useState } from "react";
@@ -84,6 +85,7 @@ function AuthenticatedRouter() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/profiles" component={ProfileSelect} />
+      <Route path="/settings" component={ProfileSettings} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

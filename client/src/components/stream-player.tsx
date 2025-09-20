@@ -6,6 +6,7 @@ import {
   Volume1, VolumeOff, Minimize
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/queryClient";
 import type { Content } from "@shared/schema";
 
 interface StreamPlayerProps {
@@ -127,7 +128,7 @@ export default function StreamPlayer({
     };
 
     // Separate function to save watch progress (throttled)
-    const saveWatchProgress = () => {
+    const saveWatchProgress = async () => {
       if (!video || video.paused || video.seeking) return;
       
       const now = Date.now();
@@ -135,12 +136,27 @@ export default function StreamPlayer({
         const profileId = localStorage.getItem('selectedProfileId');
         if (profileId) {
           const watchKey = `watch_${profileId}_${content.id}`;
+          const progressData = {
+            currentTime: video.currentTime,
+            duration: video.duration,
+            lastWatched: now
+          };
+          
           try {
-            localStorage.setItem(watchKey, JSON.stringify({
-              currentTime: video.currentTime,
-              duration: video.duration,
-              lastWatched: now
-            }));
+            // Save to localStorage
+            localStorage.setItem(watchKey, JSON.stringify(progressData));
+            
+            // Also save to backend
+            const progress = Math.round((video.currentTime / video.duration) * 100);
+            const watchHistoryData = {
+              contentId: content.id,
+              progress: progress,
+              episodeNumber: currentEpisode || null,
+              seasonNumber: currentSeason || null,
+              completed: progress >= 95 // Mark as completed if 95% or more
+            };
+            
+            await apiRequest('POST', `/api/profiles/${profileId}/watch-progress`, watchHistoryData);
             lastSavedTimeRef.current = now;
           } catch (error) {
             console.warn('Error saving watch progress:', error);
