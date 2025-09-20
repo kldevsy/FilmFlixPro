@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsx server/index.ts",
-    "build:server": "tsc --outDir dist/server --module ESNext --target ES2022 --esModuleInterop server/**/*.ts",
+    "build:server": "tsc --outDir dist/server --module ESNext --target ES2022 --esModuleInterop",
     "build:client": "vite build",
     "build": "npm run build:server && npm run build:client",
     "start": "node dist/server/index.js",
