@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createServer } from '../server/index';
+// Importa do JS compilado gerado pelo esbuild na pasta dist
+import { createServer } from '../dist/server/index.js';
 
 const app = createServer();
 
